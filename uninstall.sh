@@ -1,9 +1,19 @@
 #!/bin/bash
 set -e
 
-echo "🗑 Removing X-UI Management Tool..."
+INSTALL_DIR="/opt/xuim"
+BIN_FILE="/usr/bin/xuim"
 
-rm -rf /opt/xuim
-rm -f /usr/bin/xuim
+echo "Uninstalling X-UI Management Tool..."
 
-echo "✅ X-UI Management Tool uninstalled successfully."
+# Remove symlink
+if [ -f "$BIN_FILE" ]; then
+    rm -f "$BIN_FILE"
+fi
+
+# Remove installation directory
+if [ -d "$INSTALL_DIR" ]; then
+    rm -rf "$INSTALL_DIR"
+fi
+
+echo "Uninstallation completed."
