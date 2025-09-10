@@ -199,6 +199,42 @@ def delete_users_by_email(email_list):
 
 # ---------------- Update Traffic ----------------
 def update_client_traffic():
+    while True:
+        email = input("Enter client email (or 0 to go back): ").strip()
+        if email == "0":
+            break
+        if not email:
+            print(f"{RED}Email cannot be empty.{RESET}")
+            continue
+
+        try:
+            up_gb = float(input("Upload (GB): ").strip())
+            down_gb = float(input("Download (GB): ").strip())
+        except ValueError:
+            print(f"{RED}Invalid number entered.{RESET}")
+            continue
+
+        up_bytes = int(up_gb * 1024**3)
+        down_bytes = int(down_gb * 1024**3)
+
+        conn = connect_db()
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                "UPDATE client_traffics SET up=?, down=? WHERE email=?",
+                (up_bytes, down_bytes, email),
+            )
+            conn.commit()
+            if cursor.rowcount > 0:
+                print(
+                    f"{GREEN}Traffic updated for {email}: Upload={up_gb}GB, Download={down_gb}GB{RESET}"
+                )
+            else:
+                print(f"{RED}No client found with email '{email}'{RESET}")
+        except Exception as e:
+            print(f"{RED}Failed to update traffic: {e}{RESET}")
+        finally:
+            conn.close()
     email = input("Enter client email: ").strip()
     if not email:
         print(f"{RED}Email cannot be empty.{RESET}")
