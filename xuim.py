@@ -87,8 +87,8 @@ def get_expired_users(days=0, name=None, inbound_id=None):
         for c in clients:
             expiry_ms = c.get("expiryTime", 0) or 0
             expiry_sec = expiry_ms // 1000
-            if expiry_sec == 0:
-                continue  # شروع نشده یا نامحدود
+            if expiry_sec <= 0:
+                continue  # Not-started (<0) یا Unlimited (0) نادیده گرفته می‌شوند
             if expiry_sec < now:
                 days_expired = (now - expiry_sec) // (24 * 3600)
                 if days > 0 and days_expired < days:
@@ -143,8 +143,8 @@ def get_not_started_users(inbound_id=None):
         for c in clients:
             expiry_ms = c.get("expiryTime", 0) or 0
             expiry_sec = expiry_ms // 1000
-            if expiry_sec != 0:
-                continue  # فقط کسانی که expiryTime صفر دارند
+            if expiry_sec >= 0:
+                continue  # فقط کسانی که <0 هستند → Not-started
             email = (
                 c.get("email") or c.get("emailAddress") or c.get("id") or "<no-email>"
             )
@@ -303,7 +303,7 @@ def expired_users_menu():
 def not_started_menu():
     inbound_id = select_inbound()
     while True:
-        print("\nNot-started Users (expiryTime == 0)")
+        print("\nNot-started Users (expiryTime < 0)")
         print("1 - Show Not-started Users")
         print("2 - Delete Not-started Users Contain Specific Name")
         print("3 - Delete All Not-started Users")
@@ -367,7 +367,7 @@ def main_menu():
     while True:
         print("\nX-UI Management Tool")
         print("1 - Expired Users Management")
-        print("2 - Not-started Users (expiryTime == 0)")
+        print("2 - Not-started Users (expiryTime < 0)")
         print("9 - Uninstall X-UI Management Tool")
         print("0 - Exit")
         choice = input("Enter choice: ").strip()
