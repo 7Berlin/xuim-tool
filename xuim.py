@@ -7,7 +7,7 @@ import sys
 from tabulate import tabulate
 
 DB_PATH = "/etc/x-ui/x-ui.db"
-now = int(time.time())  # ثانیه
+now = int(time.time())
 
 
 def connect_db():
@@ -22,7 +22,7 @@ def list_inbounds():
     conn = connect_db()
     cursor = conn.cursor()
     try:
-        cursor.execute("SELECT id, remark FROM inbounds")
+        cursor.execute("SELECT id, remark, port FROM inbounds")
         rows = cursor.fetchall()
     except Exception as e:
         print(f"DB query failed: {e}")
@@ -38,9 +38,9 @@ def select_inbound():
         return None
 
     print("\nInbounds:")
-    for idx, (iid, remark) in enumerate(inbounds, start=1):
+    for idx, (iid, remark, port) in enumerate(inbounds, start=1):
         label = remark if remark else "(no remark)"
-        print(f"{idx} - {label} (ID: {iid})")
+        print(f"{idx} - {label} (Port: {port}, ID: {iid})")
     print("0 - All Inbounds")
 
     choice = input("Select inbound (number): ").strip()
@@ -62,10 +62,11 @@ def get_expired_users(days=0, name=None, inbound_id=None):
     try:
         if inbound_id:
             cursor.execute(
-                "SELECT id, remark, settings FROM inbounds WHERE id=?", (inbound_id,)
+                "SELECT id, remark, settings, port FROM inbounds WHERE id=?",
+                (inbound_id,),
             )
         else:
-            cursor.execute("SELECT id, remark, settings FROM inbounds")
+            cursor.execute("SELECT id, remark, settings, port FROM inbounds")
         rows = cursor.fetchall()
     except Exception as e:
         print(f"DB query failed: {e}")
@@ -74,7 +75,7 @@ def get_expired_users(days=0, name=None, inbound_id=None):
 
     expired_users = []
     for row in rows:
-        inbound_id_row, remark, settings_json = row
+        inbound_id_row, remark, settings_json, port = row
         try:
             settings = json.loads(settings_json)
         except Exception:
@@ -88,7 +89,7 @@ def get_expired_users(days=0, name=None, inbound_id=None):
             expiry_ms = c.get("expiryTime", 0) or 0
             expiry_sec = expiry_ms // 1000
             if expiry_sec <= 0:
-                continue  # Not-started (<0) یا Unlimited (0) نادیده گرفته می‌شوند
+                continue  # Not-started (<0) or Unlimited (0) ignored
             if expiry_sec < now:
                 days_expired = (now - expiry_sec) // (24 * 3600)
                 if days > 0 and days_expired < days:
@@ -105,6 +106,7 @@ def get_expired_users(days=0, name=None, inbound_id=None):
                     {
                         "inbound_id": inbound_id_row,
                         "inbound_remark": remark or "",
+                        "port": port,
                         "email": email,
                         "expiryTime": expiry_sec,
                         "days_expired": days_expired,
@@ -120,10 +122,11 @@ def get_not_started_users(inbound_id=None):
     try:
         if inbound_id:
             cursor.execute(
-                "SELECT id, remark, settings FROM inbounds WHERE id=?", (inbound_id,)
+                "SELECT id, remark, settings, port FROM inbounds WHERE id=?",
+                (inbound_id,),
             )
         else:
-            cursor.execute("SELECT id, remark, settings FROM inbounds")
+            cursor.execute("SELECT id, remark, settings, port FROM inbounds")
         rows = cursor.fetchall()
     except Exception as e:
         print(f"DB query failed: {e}")
@@ -132,7 +135,7 @@ def get_not_started_users(inbound_id=None):
 
     not_started = []
     for row in rows:
-        inbound_id_row, remark, settings_json = row
+        inbound_id_row, remark, settings_json, port = row
         try:
             settings = json.loads(settings_json)
         except Exception:
@@ -152,6 +155,7 @@ def get_not_started_users(inbound_id=None):
                 {
                     "inbound_id": inbound_id_row,
                     "inbound_remark": remark or "",
+                    "port": port,
                     "email": email,
                     "expiryTime": expiry_sec,
                 }
@@ -218,24 +222,37 @@ def show_table(users, not_started=False):
     table = []
     if not_started:
         for u in users:
-            table.append([u["email"], u["inbound_remark"], "Not started"])
-        print(tabulate(table, headers=["Email", "Inbound", "Status"], tablefmt="grid"))
+            table.append(
+                [u["email"], u["inbound_remark"], u.get("port", "N/A"), "Not started"]
+            )
+        print(
+            tabulate(
+                table, headers=["Email", "Inbound", "Port", "Status"], tablefmt="grid"
+            )
+        )
     else:
         for u in users:
             exp_date = time.strftime(
                 "%Y-%m-%d %H:%M:%S", time.localtime(u["expiryTime"])
             )
-            table.append([u["email"], u["inbound_remark"], exp_date, u["days_expired"]])
+            table.append(
+                [
+                    u["email"],
+                    u["inbound_remark"],
+                    u.get("port", "N/A"),
+                    exp_date,
+                    u["days_expired"],
+                ]
+            )
         print(
             tabulate(
                 table,
-                headers=["Email", "Inbound", "Expiry Time", "Days Expired"],
+                headers=["Email", "Inbound", "Port", "Expiry Time", "Days Expired"],
                 tablefmt="grid",
             )
         )
 
 
-# منوها
 def expired_users_menu():
     inbound_id = select_inbound()
     while True:
