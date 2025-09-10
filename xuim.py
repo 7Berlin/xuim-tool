@@ -4,12 +4,14 @@ import json
 import time
 import os
 import sys
+import curses
 from tabulate import tabulate
 
 DB_PATH = "/etc/x-ui/x-ui.db"
 now = int(time.time())
 
 
+# ------------------------- Database ------------------------- #
 def connect_db():
     try:
         return sqlite3.connect(DB_PATH)
@@ -31,31 +33,72 @@ def list_inbounds():
     return rows
 
 
+# ------------------------- Menu (Arrow + Number) ------------------------- #
+def menu_select(options, title="Menu"):
+    """Return index of selected option. Supports arrow keys and number input."""
+    selected_index = 0
+
+    def draw_menu(stdscr):
+        nonlocal selected_index
+        curses.curs_set(0)
+        stdscr.nodelay(False)
+        while True:
+            stdscr.clear()
+            stdscr.addstr(0, 0, title + "\n\n", curses.A_BOLD)
+
+            for idx, option in enumerate(options):
+                if idx == selected_index:
+                    stdscr.addstr(f"> {option}\n", curses.A_REVERSE)
+                else:
+                    stdscr.addstr(f"  {option}\n")
+
+            stdscr.addstr("\n(Type number + Enter to select)")
+            key = stdscr.getch()
+
+            if key == curses.KEY_UP:
+                selected_index = (selected_index - 1) % len(options)
+            elif key == curses.KEY_DOWN:
+                selected_index = (selected_index + 1) % len(options)
+            elif key in [10, 13]:  # Enter
+                return selected_index
+            elif 48 <= key <= 57:  # Number keys 0-9
+                num_str = chr(key)
+                stdscr.addstr(f"\nSelected number: {num_str}")
+                stdscr.refresh()
+                curses.echo()
+                rest = stdscr.getstr().decode().strip()
+                curses.noecho()
+                full_num = num_str + rest
+                if full_num.isdigit():
+                    num = int(full_num)
+                    if 0 <= num < len(options):
+                        return num
+            elif key in [27, 8]:  # Esc or Backspace
+                return -1
+
+    return curses.wrapper(draw_menu)
+
+
+# ------------------------- Inbound Selection ------------------------- #
 def select_inbound():
     inbounds = list_inbounds()
     if not inbounds:
         print("No inbounds found.")
         return None
 
-    print("\nInbounds:")
-    for idx, (iid, remark, port) in enumerate(inbounds, start=1):
+    options = []
+    for iid, remark, port in inbounds:
         label = remark if remark else "(no remark)"
-        print(f"{idx} - {label} (Port: {port}, ID: {iid})")
-    print("0 - All Inbounds")
+        options.append(f"{label} (Port: {port}, ID: {iid})")
+    options.append("All Inbounds")
 
-    choice = input("Select inbound (number): ").strip()
-    if choice == "0" or choice == "":
+    idx = menu_select(options, title="Select Inbound")
+    if idx == -1 or idx == len(options) - 1:
         return None
-    try:
-        choice = int(choice)
-        if 1 <= choice <= len(inbounds):
-            return inbounds[choice - 1][0]
-    except Exception:
-        pass
-    print("Invalid choice — defaulting to All Inbounds.")
-    return None
+    return inbounds[idx][0]
 
 
+# ------------------------- Users Handling ------------------------- #
 def get_expired_users(days=0, name=None, inbound_id=None):
     conn = connect_db()
     cursor = conn.cursor()
@@ -80,16 +123,14 @@ def get_expired_users(days=0, name=None, inbound_id=None):
             settings = json.loads(settings_json)
         except Exception:
             continue
-
         clients = settings.get("clients") or []
         if not isinstance(clients, list):
             continue
-
         for c in clients:
             expiry_ms = c.get("expiryTime", 0) or 0
             expiry_sec = expiry_ms // 1000
             if expiry_sec <= 0:
-                continue  # Not-started (<0) or Unlimited (0) ignored
+                continue  # Not-started or Unlimited ignored
             if expiry_sec < now:
                 days_expired = (now - expiry_sec) // (24 * 3600)
                 if days > 0 and days_expired < days:
@@ -147,7 +188,7 @@ def get_not_started_users(inbound_id=None):
             expiry_ms = c.get("expiryTime", 0) or 0
             expiry_sec = expiry_ms // 1000
             if expiry_sec >= 0:
-                continue  # فقط کسانی که <0 هستند → Not-started
+                continue  # فقط Not-started (<0) هستند
             email = (
                 c.get("email") or c.get("emailAddress") or c.get("id") or "<no-email>"
             )
@@ -179,8 +220,7 @@ def delete_users(users):
             row = cursor.fetchone()
             if not row:
                 continue
-            settings_json = row[0]
-            settings = json.loads(settings_json)
+            settings = json.loads(row[0])
             clients = settings.get("clients") or []
             new_clients = [
                 c for c in clients if (c.get("email") or c.get("id")) != u["email"]
@@ -200,10 +240,9 @@ def delete_users(users):
                 else:
                     continue
             settings["clients"] = new_clients
-            new_settings_json = json.dumps(settings, ensure_ascii=False)
             cursor.execute(
                 "UPDATE inbounds SET settings=? WHERE id=?",
-                (new_settings_json, u["inbound_id"]),
+                (json.dumps(settings, ensure_ascii=False), u["inbound_id"]),
             )
             removed += 1
             print(f"Removed {u['email']} from inbound ID {u['inbound_id']}")
@@ -215,6 +254,7 @@ def delete_users(users):
     print(f"Deletion completed. Total removed attempts: {removed}")
 
 
+# ------------------------- Display Tables ------------------------- #
 def show_table(users, not_started=False):
     if not users:
         print("No users found for this query.")
@@ -253,31 +293,35 @@ def show_table(users, not_started=False):
         )
 
 
+# ------------------------- Menus ------------------------- #
 def expired_users_menu():
     inbound_id = select_inbound()
     while True:
-        print("\nExpired Users Management")
-        print("1 - Show All Expired Users")
-        print("2 - Show Expired Users Contain Specific Name")
-        print("3 - Show Expired Users More Than Some Days (Default: 30)")
-        print("4 - Delete All Expired Users")
-        print("5 - Delete Expired Users Contain Specific Name")
-        print("6 - Delete Expired Users More Than Some Days (Default: 30)")
-        print("7 - Back to Main Menu")
-        choice = input("Enter choice: ").strip()
-        if choice == "1":
+        options = [
+            "Show All Expired Users",
+            "Show Expired Users Contain Specific Name",
+            "Show Expired Users More Than Some Days (Default:30)",
+            "Delete All Expired Users",
+            "Delete Expired Users Contain Specific Name",
+            "Delete Expired Users More Than Some Days (Default:30)",
+            "Back to Main Menu",
+        ]
+        idx = menu_select(options, "Expired Users Management")
+        if idx == -1 or idx == 6:
+            break
+        elif idx == 0:
             users = get_expired_users(inbound_id=inbound_id)
             show_table(users)
-        elif choice == "2":
-            name = input("Enter name (substring): ").strip()
+        elif idx == 1:
+            name = input("Enter name substring: ").strip()
             users = get_expired_users(name=name, inbound_id=inbound_id)
             show_table(users)
-        elif choice == "3":
+        elif idx == 2:
             days = input("Days (default 30): ").strip()
             days = int(days) if days.isdigit() else 30
             users = get_expired_users(days=days, inbound_id=inbound_id)
             show_table(users)
-        elif choice == "4":
+        elif idx == 3:
             users = get_expired_users(inbound_id=inbound_id)
             show_table(users)
             if (
@@ -286,8 +330,8 @@ def expired_users_menu():
                 == "yes"
             ):
                 delete_users(users)
-        elif choice == "5":
-            name = input("Enter name (substring): ").strip()
+        elif idx == 4:
+            name = input("Enter name substring: ").strip()
             users = get_expired_users(name=name, inbound_id=inbound_id)
             show_table(users)
             if (
@@ -298,7 +342,7 @@ def expired_users_menu():
                 == "yes"
             ):
                 delete_users(users)
-        elif choice == "6":
+        elif idx == 5:
             days = input("Days (default 30): ").strip()
             days = int(days) if days.isdigit() else 30
             users = get_expired_users(days=days, inbound_id=inbound_id)
@@ -311,26 +355,25 @@ def expired_users_menu():
                 == "yes"
             ):
                 delete_users(users)
-        elif choice == "7":
-            break
-        else:
-            print("Invalid choice!")
 
 
 def not_started_menu():
     inbound_id = select_inbound()
     while True:
-        print("\nNot-started Users (expiryTime < 0)")
-        print("1 - Show Not-started Users")
-        print("2 - Delete Not-started Users Contain Specific Name")
-        print("3 - Delete All Not-started Users")
-        print("0 - Back to Main Menu")
-        choice = input("Enter choice: ").strip()
-        if choice == "1":
+        options = [
+            "Show Not-started Users",
+            "Delete Not-started Users Contain Specific Name",
+            "Delete All Not-started Users",
+            "Back to Main Menu",
+        ]
+        idx = menu_select(options, "Not-started Users Management")
+        if idx == -1 or idx == 3:
+            break
+        elif idx == 0:
             users = get_not_started_users(inbound_id=inbound_id)
             show_table(users, not_started=True)
-        elif choice == "2":
-            name = input("Enter name (substring): ").strip()
+        elif idx == 1:
+            name = input("Enter name substring: ").strip()
             users = [
                 u
                 for u in get_not_started_users(inbound_id=inbound_id)
@@ -345,7 +388,7 @@ def not_started_menu():
                 == "yes"
             ):
                 delete_users(users)
-        elif choice == "3":
+        elif idx == 2:
             users = get_not_started_users(inbound_id=inbound_id)
             show_table(users, not_started=True)
             if (
@@ -356,10 +399,6 @@ def not_started_menu():
                 == "yes"
             ):
                 delete_users(users)
-        elif choice == "0":
-            break
-        else:
-            print("Invalid choice!")
 
 
 def uninstall_tool():
@@ -382,23 +421,22 @@ def uninstall_tool():
 
 def main_menu():
     while True:
-        print("\nX-UI Management Tool")
-        print("1 - Expired Users Management")
-        print("2 - Not-started Users (expiryTime < 0)")
-        print("9 - Uninstall X-UI Management Tool")
-        print("0 - Exit")
-        choice = input("Enter choice: ").strip()
-        if choice == "1":
-            expired_users_menu()
-        elif choice == "2":
-            not_started_menu()
-        elif choice == "9":
-            uninstall_tool()
-        elif choice == "0":
+        options = [
+            "Expired Users Management",
+            "Not-started Users (expiryTime < 0)",
+            "Uninstall X-UI Management Tool",
+            "Exit",
+        ]
+        idx = menu_select(options, "X-UI Management Tool")
+        if idx == -1 or idx == 3:
             print("Bye.")
             sys.exit(0)
-        else:
-            print("Invalid choice!")
+        elif idx == 0:
+            expired_users_menu()
+        elif idx == 1:
+            not_started_menu()
+        elif idx == 2:
+            uninstall_tool()
 
 
 if __name__ == "__main__":
