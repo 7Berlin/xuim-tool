@@ -34,6 +34,20 @@ def list_inbounds():
 
 # ------------------------- Menu ------------------------- #
 def menu_select(options, title="Menu"):
+    """Select menu option by number with 0 as Exit/Back in red."""
+    print("\033[1;36m" + title + "\033[0m\n")  # Cyan title
+    for idx, option in enumerate(options, start=1):
+        print(f"\033[1;33m{idx}.\033[0m {option}")  # Yellow numbers
+    print(f"\033[1;31m0.\033[0m Exit / Back")  # Red 0 option
+    choice = input("\nEnter number: ").strip()
+    if choice.isdigit():
+        idx = int(choice)
+        if idx == 0:
+            return 0
+        elif 1 <= idx <= len(options):
+            return idx
+    print("Invalid choice, try again.")
+    return menu_select(options, title)
     """Select menu option by number."""
     print("\033[1;36m" + title + "\033[0m\n")  # Cyan title
     for idx, option in enumerate(options):
