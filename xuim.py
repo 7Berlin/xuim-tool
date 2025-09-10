@@ -4,7 +4,6 @@ import json
 import time
 import os
 import sys
-import curses
 from tabulate import tabulate
 
 DB_PATH = "/etc/x-ui/x-ui.db"
@@ -33,50 +32,19 @@ def list_inbounds():
     return rows
 
 
-# ------------------------- Menu (Arrow + Number) ------------------------- #
+# ------------------------- Menu ------------------------- #
 def menu_select(options, title="Menu"):
-    """Return index of selected option. Supports arrow keys and number input."""
-    selected_index = 0
-
-    def draw_menu(stdscr):
-        nonlocal selected_index
-        curses.curs_set(0)
-        stdscr.nodelay(False)
-        while True:
-            stdscr.clear()
-            stdscr.addstr(0, 0, title + "\n\n", curses.A_BOLD)
-
-            for idx, option in enumerate(options):
-                if idx == selected_index:
-                    stdscr.addstr(f"> {option}\n", curses.A_REVERSE)
-                else:
-                    stdscr.addstr(f"  {option}\n")
-
-            stdscr.addstr("\n(Type number + Enter to select)")
-            key = stdscr.getch()
-
-            if key == curses.KEY_UP:
-                selected_index = (selected_index - 1) % len(options)
-            elif key == curses.KEY_DOWN:
-                selected_index = (selected_index + 1) % len(options)
-            elif key in [10, 13]:  # Enter
-                return selected_index
-            elif 48 <= key <= 57:  # Number keys 0-9
-                num_str = chr(key)
-                stdscr.addstr(f"\nSelected number: {num_str}")
-                stdscr.refresh()
-                curses.echo()
-                rest = stdscr.getstr().decode().strip()
-                curses.noecho()
-                full_num = num_str + rest
-                if full_num.isdigit():
-                    num = int(full_num)
-                    if 0 <= num < len(options):
-                        return num
-            elif key in [27, 8]:  # Esc or Backspace
-                return -1
-
-    return curses.wrapper(draw_menu)
+    """Select menu option by number."""
+    print("\033[1;36m" + title + "\033[0m\n")  # Cyan title
+    for idx, option in enumerate(options):
+        print(f"\033[1;33m{idx}.\033[0m {option}")  # Yellow numbers
+    choice = input("\nEnter number: ").strip()
+    if choice.isdigit():
+        idx = int(choice)
+        if 0 <= idx < len(options):
+            return idx
+    print("Invalid choice, try again.")
+    return menu_select(options, title)
 
 
 # ------------------------- Inbound Selection ------------------------- #
@@ -85,15 +53,13 @@ def select_inbound():
     if not inbounds:
         print("No inbounds found.")
         return None
-
     options = []
     for iid, remark, port in inbounds:
         label = remark if remark else "(no remark)"
         options.append(f"{label} (Port: {port}, ID: {iid})")
     options.append("All Inbounds")
-
-    idx = menu_select(options, title="Select Inbound")
-    if idx == -1 or idx == len(options) - 1:
+    idx = menu_select(options, "Select Inbound")
+    if idx == len(options) - 1:
         return None
     return inbounds[idx][0]
 
@@ -146,7 +112,6 @@ def get_expired_users(days=0, name=None, inbound_id=None):
                 expired_users.append(
                     {
                         "inbound_id": inbound_id_row,
-                        "inbound_remark": remark or "",
                         "port": port,
                         "email": email,
                         "expiryTime": expiry_sec,
@@ -195,7 +160,6 @@ def get_not_started_users(inbound_id=None):
             not_started.append(
                 {
                     "inbound_id": inbound_id_row,
-                    "inbound_remark": remark or "",
                     "port": port,
                     "email": email,
                     "expiryTime": expiry_sec,
@@ -245,7 +209,7 @@ def delete_users(users):
                 (json.dumps(settings, ensure_ascii=False), u["inbound_id"]),
             )
             removed += 1
-            print(f"Removed {u['email']} from inbound ID {u['inbound_id']}")
+            print(f"Removed {u['email']}")
         except Exception as e:
             print(f"Failed to remove {u.get('email')}: {e}")
             continue
@@ -279,41 +243,6 @@ def show_table(users, not_started=False):
                 tablefmt="grid",
             )
         )
-    if not users:
-        print("No users found for this query.")
-        return
-    table = []
-    if not_started:
-        for u in users:
-            table.append(
-                [u["email"], u["inbound_remark"], u.get("port", "N/A"), "Not started"]
-            )
-        print(
-            tabulate(
-                table, headers=["Email", "Inbound", "Port", "Status"], tablefmt="grid"
-            )
-        )
-    else:
-        for u in users:
-            exp_date = time.strftime(
-                "%Y-%m-%d %H:%M:%S", time.localtime(u["expiryTime"])
-            )
-            table.append(
-                [
-                    u["email"],
-                    u["inbound_remark"],
-                    u.get("port", "N/A"),
-                    exp_date,
-                    u["days_expired"],
-                ]
-            )
-        print(
-            tabulate(
-                table,
-                headers=["Email", "Inbound", "Port", "Expiry Time", "Days Expired"],
-                tablefmt="grid",
-            )
-        )
 
 
 # ------------------------- Menus ------------------------- #
@@ -330,7 +259,7 @@ def expired_users_menu():
             "Back to Main Menu",
         ]
         idx = menu_select(options, "Expired Users Management")
-        if idx == -1 or idx == 6:
+        if idx == 6:
             break
         elif idx == 0:
             users = get_expired_users(inbound_id=inbound_id)
@@ -390,7 +319,7 @@ def not_started_menu():
             "Back to Main Menu",
         ]
         idx = menu_select(options, "Not-started Users Management")
-        if idx == -1 or idx == 3:
+        if idx == 3:
             break
         elif idx == 0:
             users = get_not_started_users(inbound_id=inbound_id)
@@ -451,7 +380,7 @@ def main_menu():
             "Exit",
         ]
         idx = menu_select(options, "X-UI Management Tool")
-        if idx == -1 or idx == 3:
+        if idx == 3:
             print("Bye.")
             sys.exit(0)
         elif idx == 0:
