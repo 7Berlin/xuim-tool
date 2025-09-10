@@ -33,12 +33,15 @@ def list_inbounds():
 
 
 # ------------------------- Menu ------------------------- #
-def menu_select(options, title="Menu"):
-    """Select menu option by number. 0 is always Exit/Back in red."""
+def menu_select(options, title="Menu", is_main=False):
+    """Select menu option by number. 0 is Exit (main) or Back (sub-menu)."""
     print("\033[1;36m" + title + "\033[0m\n")  # Cyan title
     for idx, option in enumerate(options, start=1):
         print(f"\033[1;33m{idx}.\033[0m {option}")  # Yellow numbers
-    print(f"\033[1;31m0.\033[0m Exit / Back")  # Red 0 option
+    if is_main:
+        print(f"\033[1;31m0.\033[0m Exit")  # Red 0 for main menu
+    else:
+        print(f"\033[1;31m0.\033[0m Back")  # Red 0 for sub-menu
     choice = input("\nEnter number: ").strip()
     if choice.isdigit():
         idx = int(choice)
@@ -47,7 +50,7 @@ def menu_select(options, title="Menu"):
         elif 1 <= idx <= len(options):
             return idx
     print("Invalid choice, try again.")
-    return menu_select(options, title)
+    return menu_select(options, title, is_main)
 
 
 # ------------------------- Inbound Selection ------------------------- #
@@ -61,7 +64,7 @@ def select_inbound():
         label = remark if remark else "(no remark)"
         options.append(f"{label} (Port: {port}, ID: {iid})")
     options.append("All Inbounds")
-    idx = menu_select(options, "Select Inbound")
+    idx = menu_select(options, "Select Inbound", is_main=False)
     if idx == 0 or idx == len(options):
         return None
     return inbounds[idx - 1][0]
@@ -110,8 +113,6 @@ def get_expired_users(days=0, name=None, inbound_id=None):
                     or c.get("id")
                     or "<no-email>"
                 )
-                if name and name.lower() not in (email or "").lower():
-                    continue
                 expired_users.append(
                     {
                         "inbound_id": inbound_id_row,
@@ -260,7 +261,7 @@ def expired_users_menu():
             "Delete Expired Users Contain Specific Name",
             "Delete Expired Users More Than Some Days (Default:30)",
         ]
-        idx = menu_select(options, "Expired Users Management")
+        idx = menu_select(options, "Expired Users Management", is_main=False)
         if idx == 0:
             break
         elif idx == 1:
@@ -319,7 +320,7 @@ def not_started_menu():
             "Delete Not-started Users Contain Specific Name",
             "Delete All Not-started Users",
         ]
-        idx = menu_select(options, "Not-started Users Management")
+        idx = menu_select(options, "Not-started Users Management", is_main=False)
         if idx == 0:
             break
         elif idx == 1:
@@ -379,7 +380,7 @@ def main_menu():
             "Not-started Users (expiryTime < 0)",
             "Uninstall X-UI Management Tool",
         ]
-        idx = menu_select(options, "X-UI Management Tool")
+        idx = menu_select(options, "X-UI Management Tool", is_main=True)
         if idx == 0:
             print("Bye.")
             sys.exit(0)
