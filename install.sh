@@ -19,3 +19,5 @@ EOF
 chmod +x /usr/bin/xuim
 
 echo "✅ Installation completed. Run with: xuim"
+
+sudo xuim

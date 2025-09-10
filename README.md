@@ -1,0 +1,1 @@
+bash <(curl -s https://raw.githubusercontent.com/7berlin/xuim-tool/install.sh)
