@@ -6,9 +6,11 @@ apt update && apt install -y python3 python3-pip git
 pip3 install tabulate
 
 echo "📥 Cloning repository..."
+rm -rf /opt/xuim
 git clone https://github.com/7berlin/xuim-tool /opt/xuim
 
 chmod +x /opt/xuim/xuim.py
+chmod +x /opt/xuim/uninstall.sh
 
 echo "⚙️ Creating xuim command..."
 cat <<EOF >/usr/bin/xuim
@@ -18,6 +20,6 @@ EOF
 
 chmod +x /usr/bin/xuim
 
-echo "✅ Installation completed. Run with: xuim"
-
-sudo xuim
+echo "✅ Installation completed."
+echo "🚀 Running xuim now..."
+xuim
