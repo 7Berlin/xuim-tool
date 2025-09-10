@@ -1,35 +1,25 @@
 #!/bin/bash
 set -e
 
-INSTALL_DIR="/opt/xuim"
-BIN_FILE="/usr/bin/xuim"
+echo "📦 Installing requirements..."
+apt update && apt install -y python3 python3-pip git
+pip3 install tabulate
 
-echo "Installing X-UI Management Tool..."
+echo "📥 Cloning repository..."
+rm -rf /opt/xuim
+git clone https://github.com/7berlin/xuim-tool /opt/xuim
 
-# Install dependencies
-if ! command -v python3 >/dev/null 2>&1; then
-    echo "python3 not found. Installing..."
-    apt-get update && apt-get install -y python3 python3-pip
-fi
+chmod +x /opt/xuim/xuim.py
+chmod +x /opt/xuim/uninstall.sh
 
-pip3 install tabulate --quiet
+echo "⚙️ Creating xuim command..."
+cat <<EOF >/usr/bin/xuim
+#!/bin/bash
+exec python3 /opt/xuim/xuim.py "$@"
+EOF
 
-# Create installation directory
-mkdir -p "$INSTALL_DIR"
+chmod +x /usr/bin/xuim
 
-# Copy xuim.py to installation directory
-cp xuim.py "$INSTALL_DIR/xuim.py"
-chmod +x "$INSTALL_DIR/xuim.py"
-
-# Create symlink for easy execution
-ln -sf "$INSTALL_DIR/xuim.py" "$BIN_FILE"
-
-# Copy uninstall script
-cp uninstall.sh "$INSTALL_DIR/uninstall.sh"
-chmod +x "$INSTALL_DIR/uninstall.sh"
-
-echo "Installation completed!"
-echo "Run the tool with: xuim"
-
-# Run the tool immediately after installation
-"$BIN_FILE"
+echo "✅ Installation completed."
+echo "🚀 Running xuim now..."
+xuim
