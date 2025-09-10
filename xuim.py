@@ -85,11 +85,12 @@ def get_expired_users(days=0, name=None, inbound_id=None):
             continue
 
         for c in clients:
-            expiry = c.get("expiryTime", 0) or 0
-            if expiry == 0:
-                continue
-            if expiry < now:
-                days_expired = (now - expiry) // (24 * 3600)
+            expiry_ms = c.get("expiryTime", 0) or 0
+            expiry_sec = expiry_ms // 1000  # تبدیل میلی‌ثانیه به ثانیه
+            if expiry_sec == 0:
+                continue  # شروع نشده یا نامحدود، منقضی نشده
+            if expiry_sec < now:
+                days_expired = (now - expiry_sec) // (24 * 3600)
                 if days > 0 and days_expired < days:
                     continue
                 email = (
@@ -105,7 +106,7 @@ def get_expired_users(days=0, name=None, inbound_id=None):
                         "inbound_id": inbound_id_row,
                         "inbound_remark": remark or "",
                         "email": email,
-                        "expiryTime": expiry,
+                        "expiryTime": expiry_sec,
                         "days_expired": days_expired,
                     }
                 )
@@ -140,22 +141,21 @@ def get_not_started_users(inbound_id=None):
         if not isinstance(clients, list):
             continue
         for c in clients:
-            expiry = c.get("expiryTime", 0) or 0
-            if expiry == 0:
-                email = (
-                    c.get("email")
-                    or c.get("emailAddress")
-                    or c.get("id")
-                    or "<no-email>"
-                )
-                not_started.append(
-                    {
-                        "inbound_id": inbound_id_row,
-                        "inbound_remark": remark or "",
-                        "email": email,
-                        "expiryTime": expiry,
-                    }
-                )
+            expiry_ms = c.get("expiryTime", 0) or 0
+            expiry_sec = expiry_ms // 1000
+            if expiry_sec != 0:
+                continue  # فقط کسانی که expiryTime صفر دارند
+            email = (
+                c.get("email") or c.get("emailAddress") or c.get("id") or "<no-email>"
+            )
+            not_started.append(
+                {
+                    "inbound_id": inbound_id_row,
+                    "inbound_remark": remark or "",
+                    "email": email,
+                    "expiryTime": expiry_sec,
+                }
+            )
     conn.close()
     return not_started
 
@@ -233,154 +233,6 @@ def show_table(users, not_started=False):
                 tablefmt="grid",
             )
         )
-
-
-def expired_users_menu():
-    inbound_id = select_inbound()
-    while True:
-        print("\nExpired Users Management")
-        print("1 - Show All Expired Users")
-        print("2 - Show Expired Users Contain Specific Name")
-        print("3 - Show Expired Users More Than Some Days (Default: 30)")
-        print("4 - Delete All Expired Users")
-        print("5 - Delete Expired Users Contain Specific Name")
-        print("6 - Delete Expired Users More Than Some Days (Default: 30)")
-        print("7 - Back to Main Menu")
-        choice = input("Enter choice: ").strip()
-        if choice == "1":
-            users = get_expired_users(inbound_id=inbound_id)
-            show_table(users)
-        elif choice == "2":
-            name = input("Enter name (substring): ").strip()
-            users = get_expired_users(name=name, inbound_id=inbound_id)
-            show_table(users)
-        elif choice == "3":
-            days = input("Days (default 30): ").strip()
-            days = int(days) if days.isdigit() else 30
-            users = get_expired_users(days=days, inbound_id=inbound_id)
-            show_table(users)
-        elif choice == "4":
-            users = get_expired_users(inbound_id=inbound_id)
-            show_table(users)
-            if (
-                users
-                and input("Delete all expired users? (yes/no): ").strip().lower()
-                == "yes"
-            ):
-                delete_users(users)
-        elif choice == "5":
-            name = input("Enter name (substring): ").strip()
-            users = get_expired_users(name=name, inbound_id=inbound_id)
-            show_table(users)
-            if (
-                users
-                and input(f"Delete expired users containing '{name}'? (yes/no): ")
-                .strip()
-                .lower()
-                == "yes"
-            ):
-                delete_users(users)
-        elif choice == "6":
-            days = input("Days (default 30): ").strip()
-            days = int(days) if days.isdigit() else 30
-            users = get_expired_users(days=days, inbound_id=inbound_id)
-            show_table(users)
-            if (
-                users
-                and input(f"Delete expired users older than {days} days? (yes/no): ")
-                .strip()
-                .lower()
-                == "yes"
-            ):
-                delete_users(users)
-        elif choice == "7":
-            break
-        else:
-            print("Invalid choice!")
-
-
-def not_started_menu():
-    inbound_id = select_inbound()
-    while True:
-        print("\nNot-started Users (expiryTime == 0)")
-        print("1 - Show Not-started Users")
-        print("2 - Delete Not-started Users Contain Specific Name")
-        print("3 - Delete All Not-started Users")
-        print("0 - Back to Main Menu")
-        choice = input("Enter choice: ").strip()
-        if choice == "1":
-            users = get_not_started_users(inbound_id=inbound_id)
-            show_table(users, not_started=True)
-        elif choice == "2":
-            name = input("Enter name (substring): ").strip()
-            users = [
-                u
-                for u in get_not_started_users(inbound_id=inbound_id)
-                if name.lower() in (u["email"] or "").lower()
-            ]
-            show_table(users, not_started=True)
-            if (
-                users
-                and input(f"Delete not-started users containing '{name}'? (yes/no): ")
-                .strip()
-                .lower()
-                == "yes"
-            ):
-                delete_users(users)
-        elif choice == "3":
-            users = get_not_started_users(inbound_id=inbound_id)
-            show_table(users, not_started=True)
-            if (
-                users
-                and input("Delete ALL not-started users shown here? (yes/no): ")
-                .strip()
-                .lower()
-                == "yes"
-            ):
-                delete_users(users)
-        elif choice == "0":
-            break
-        else:
-            print("Invalid choice!")
-
-
-def uninstall_tool():
-    print("Uninstalling X-UI Management Tool...")
-    script_path = "/opt/xuim/uninstall.sh"
-    if os.path.isfile(script_path):
-        os.system(f"bash {script_path}")
-    else:
-        try:
-            if os.path.isdir("/opt/xuim"):
-                os.system("rm -rf /opt/xuim")
-            if os.path.isfile("/usr/bin/xuim"):
-                os.remove("/usr/bin/xuim")
-            print("Uninstalled (best-effort).")
-        except Exception as e:
-            print(f"Uninstall failed: {e}")
-    input("Press Enter to exit...")
-    sys.exit(0)
-
-
-def main_menu():
-    while True:
-        print("\nX-UI Management Tool")
-        print("1 - Expired Users Management")
-        print("2 - Not-started Users (expiryTime == 0)")
-        print("9 - Uninstall X-UI Management Tool")
-        print("0 - Exit")
-        choice = input("Enter choice: ").strip()
-        if choice == "1":
-            expired_users_menu()
-        elif choice == "2":
-            not_started_menu()
-        elif choice == "9":
-            uninstall_tool()
-        elif choice == "0":
-            print("Bye.")
-            sys.exit(0)
-        else:
-            print("Invalid choice!")
 
 
 if __name__ == "__main__":
