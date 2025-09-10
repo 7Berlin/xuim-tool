@@ -262,6 +262,29 @@ def show_table(users, not_started=False):
     table = []
     if not_started:
         for u in users:
+            table.append([u["email"], u.get("port", "N/A"), "Not started"])
+        print(tabulate(table, headers=["Email", "Port", "Status"], tablefmt="grid"))
+    else:
+        for u in users:
+            exp_date = time.strftime(
+                "%Y-%m-%d %H:%M:%S", time.localtime(u["expiryTime"])
+            )
+            table.append(
+                [u["email"], u.get("port", "N/A"), exp_date, u["days_expired"]]
+            )
+        print(
+            tabulate(
+                table,
+                headers=["Email", "Port", "Expiry Time", "Days Expired"],
+                tablefmt="grid",
+            )
+        )
+    if not users:
+        print("No users found for this query.")
+        return
+    table = []
+    if not_started:
+        for u in users:
             table.append(
                 [u["email"], u["inbound_remark"], u.get("port", "N/A"), "Not started"]
             )
