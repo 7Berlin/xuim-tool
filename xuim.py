@@ -475,12 +475,17 @@ def update_client_traffic():
             down_gb = input("Enter download traffic in GB: ").strip()
             up_gb = input("Enter upload traffic in GB: ").strip()
 
-            # تبدیل به بایت
             new_down = int(float(down_gb) * 1073741824) if down_gb else 0
             new_up = int(float(up_gb) * 1073741824) if up_gb else 0
-            new_all_time = new_up + new_down  # جمع up و down
 
             # 1. آپدیت client_traffics
+            cursor.execute(
+                "SELECT all_time FROM client_traffics WHERE email=?", (email,)
+            )
+            row = cursor.fetchone()
+            current_all_time = row[0] if row else 0
+            new_all_time = current_all_time + new_up + new_down
+
             cursor.execute(
                 "UPDATE client_traffics SET up=?, down=?, all_time=? WHERE email=?",
                 (new_up, new_down, new_all_time, email),
