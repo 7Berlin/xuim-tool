@@ -6,56 +6,88 @@ import os
 import sys
 from tabulate import tabulate
 
-# ANSI color codes
-RED = "\033[31m"
-GREEN = "\033[32m"
-YELLOW = "\033[33m"
-CYAN = "\033[36m"
-RESET = "\033[0m"
-
 DB_PATH = "/etc/x-ui/x-ui.db"
 now = int(time.time())
 
 
-# ---------------- Database Connection ----------------
+# ------------------------- Database ------------------------- #
 def connect_db():
     try:
         return sqlite3.connect(DB_PATH)
     except Exception as e:
-        print(f"{RED}Cannot open database '{DB_PATH}': {e}{RESET}")
+        print(f"Cannot open database '{DB_PATH}': {e}")
         sys.exit(1)
 
 
-# ---------------- Menu Helper ----------------
-def menu_select(options, title="Menu", is_main=False):
-    while True:
-        print(f"\n{CYAN}==== {title} ===={RESET}")
-        for i, opt in enumerate(options, start=1):
-            print(f"{YELLOW}{i}. {opt}{RESET}")
-        print(f"{RED}0. {'Exit' if is_main else 'Back'}{RESET}")
-        choice = input(f"Enter choice: ").strip()
-        if choice == "0":
-            return 0
-        if choice.isdigit() and 1 <= int(choice) <= len(options):
-            return int(choice)
-        print(f"{RED}Invalid choice!{RESET}")
-
-
-# ---------------- Expired Users ----------------
-def get_expired_users(days=0, name=None):
+def list_inbounds():
     conn = connect_db()
     cursor = conn.cursor()
     try:
-        cursor.execute("SELECT id, remark, settings FROM inbounds")
+        cursor.execute("SELECT id, remark, port FROM inbounds")
         rows = cursor.fetchall()
     except Exception as e:
-        print(f"{RED}DB query failed: {e}{RESET}")
+        print(f"DB query failed: {e}")
+        rows = []
+    conn.close()
+    return rows
+
+
+# ------------------------- Menu ------------------------- #
+def menu_select(options, title="Menu"):
+    """Select menu option by number. 0 is always Exit/Back in red."""
+    print("\033[1;36m" + title + "\033[0m\n")  # Cyan title
+    for idx, option in enumerate(options, start=1):
+        print(f"\033[1;33m{idx}.\033[0m {option}")  # Yellow numbers
+    print(f"\033[1;31m0.\033[0m Exit / Back")  # Red 0 option
+    choice = input("\nEnter number: ").strip()
+    if choice.isdigit():
+        idx = int(choice)
+        if idx == 0:
+            return 0
+        elif 1 <= idx <= len(options):
+            return idx
+    print("Invalid choice, try again.")
+    return menu_select(options, title)
+
+
+# ------------------------- Inbound Selection ------------------------- #
+def select_inbound():
+    inbounds = list_inbounds()
+    if not inbounds:
+        print("No inbounds found.")
+        return None
+    options = []
+    for iid, remark, port in inbounds:
+        label = remark if remark else "(no remark)"
+        options.append(f"{label} (Port: {port}, ID: {iid})")
+    options.append("All Inbounds")
+    idx = menu_select(options, "Select Inbound")
+    if idx == 0 or idx == len(options):
+        return None
+    return inbounds[idx - 1][0]
+
+
+# ------------------------- Users Handling ------------------------- #
+def get_expired_users(days=0, name=None, inbound_id=None):
+    conn = connect_db()
+    cursor = conn.cursor()
+    try:
+        if inbound_id:
+            cursor.execute(
+                "SELECT id, remark, settings, port FROM inbounds WHERE id=?",
+                (inbound_id,),
+            )
+        else:
+            cursor.execute("SELECT id, remark, settings, port FROM inbounds")
+        rows = cursor.fetchall()
+    except Exception as e:
+        print(f"DB query failed: {e}")
         conn.close()
         return []
 
     expired_users = []
     for row in rows:
-        inbound_id, remark, settings_json = row
+        inbound_id_row, remark, settings_json, port = row
         try:
             settings = json.loads(settings_json)
         except Exception:
@@ -64,21 +96,28 @@ def get_expired_users(days=0, name=None):
         if not isinstance(clients, list):
             continue
         for c in clients:
-            expiry = c.get("expiryTime", 0) or 0
-            email = c.get("email") or c.get("id") or "<no-email>"
-            if expiry == 0 or expiry < 0:
-                continue  # skip unlimited or not started
-            if expiry < now:
-                days_expired = (now - expiry) // (24 * 3600)
+            expiry_ms = c.get("expiryTime", 0) or 0
+            expiry_sec = expiry_ms // 1000
+            if expiry_sec <= 0:
+                continue  # Not-started or Unlimited ignored
+            if expiry_sec < now:
+                days_expired = (now - expiry_sec) // (24 * 3600)
                 if days > 0 and days_expired < days:
                     continue
-                if name and name.lower() not in email.lower():
+                email = (
+                    c.get("email")
+                    or c.get("emailAddress")
+                    or c.get("id")
+                    or "<no-email>"
+                )
+                if name and name.lower() not in (email or "").lower():
                     continue
                 expired_users.append(
                     {
+                        "inbound_id": inbound_id_row,
+                        "port": port,
                         "email": email,
-                        "remark": remark or "",
-                        "expiryTime": expiry,
+                        "expiryTime": expiry_sec,
                         "days_expired": days_expired,
                     }
                 )
@@ -86,21 +125,26 @@ def get_expired_users(days=0, name=None):
     return expired_users
 
 
-# ---------------- Not Started Users ----------------
-def get_not_started_users():
+def get_not_started_users(inbound_id=None):
     conn = connect_db()
     cursor = conn.cursor()
     try:
-        cursor.execute("SELECT id, remark, settings FROM inbounds")
+        if inbound_id:
+            cursor.execute(
+                "SELECT id, remark, settings, port FROM inbounds WHERE id=?",
+                (inbound_id,),
+            )
+        else:
+            cursor.execute("SELECT id, remark, settings, port FROM inbounds")
         rows = cursor.fetchall()
     except Exception as e:
-        print(f"{RED}DB query failed: {e}{RESET}")
+        print(f"DB query failed: {e}")
         conn.close()
         return []
 
     not_started = []
     for row in rows:
-        inbound_id, remark, settings_json = row
+        inbound_id_row, remark, settings_json, port = row
         try:
             settings = json.loads(settings_json)
         except Exception:
@@ -109,240 +153,209 @@ def get_not_started_users():
         if not isinstance(clients, list):
             continue
         for c in clients:
-            expiry = c.get("expiryTime", 0) or 0
-            email = c.get("email") or c.get("id") or "<no-email>"
-            if expiry < 0:  # started but first usage not yet counted
-                days_since_creation = (now - int(c.get("created_at", now) / 1000)) // (
-                    24 * 3600
-                )
-                not_started.append(
-                    {
-                        "email": email,
-                        "remark": remark or "",
-                        "days_since_creation": days_since_creation,
-                    }
-                )
+            expiry_ms = c.get("expiryTime", 0) or 0
+            expiry_sec = expiry_ms // 1000
+            if expiry_sec >= 0:
+                continue  # فقط Not-started (<0) هستند
+            email = (
+                c.get("email") or c.get("emailAddress") or c.get("id") or "<no-email>"
+            )
+            not_started.append(
+                {
+                    "inbound_id": inbound_id_row,
+                    "port": port,
+                    "email": email,
+                    "expiryTime": expiry_sec,
+                }
+            )
     conn.close()
     return not_started
 
 
-# ---------------- Show Tables ----------------
-def show_expired_users(users):
+def delete_users(users):
     if not users:
-        print(f"{RED}No expired users found.{RESET}")
-        return
-    table = []
-    for u in users:
-        exp_date = time.strftime(
-            "%Y-%m-%d %H:%M:%S", time.localtime(u["expiryTime"] / 1000)
-        )
-        table.append([u["email"], u["remark"], exp_date, u["days_expired"]])
-    print(
-        tabulate(
-            table,
-            headers=["Email", "Inbound", "Expiry Time", "Days Expired"],
-            tablefmt="grid",
-        )
-    )
-
-
-def show_not_started_users(users):
-    if not users:
-        print(f"{RED}No not-started users found.{RESET}")
-        return
-    table = []
-    for u in users:
-        table.append([u["email"], u["remark"], u["days_since_creation"]])
-    print(
-        tabulate(
-            table, headers=["Email", "Inbound", "Days Since Creation"], tablefmt="grid"
-        )
-    )
-
-
-# ---------------- Delete Users ----------------
-def delete_users_by_email(email_list):
-    if not email_list:
-        print(f"{RED}No users to delete.{RESET}")
+        print("No users to delete.")
         return
     conn = connect_db()
     cursor = conn.cursor()
-    removed_total = 0
-    try:
-        cursor.execute("SELECT id, settings FROM inbounds")
-        rows = cursor.fetchall()
-        for inbound_id, settings_json in rows:
-            try:
-                settings = json.loads(settings_json)
-            except Exception:
-                continue
-            clients = settings.get("clients") or []
-            new_clients = [
-                c
-                for c in clients
-                if (c.get("email") or c.get("id") or "") not in email_list
-            ]
-            if len(new_clients) < len(clients):
-                settings["clients"] = new_clients
-                cursor.execute(
-                    "UPDATE inbounds SET settings=? WHERE id=?",
-                    (json.dumps(settings), inbound_id),
-                )
-                removed_total += len(clients) - len(new_clients)
-        conn.commit()
-        print(f"{GREEN}Removed {removed_total} users.{RESET}")
-    except Exception as e:
-        print(f"{RED}Deletion failed: {e}{RESET}")
-    finally:
-        conn.close()
-
-
-# ---------------- Update Traffic ----------------
-def update_client_traffic():
-    while True:
-        email = input("Enter client email (or 0 to go back): ").strip()
-        if email == "0":
-            break
-        if not email:
-            print(f"{RED}Email cannot be empty.{RESET}")
-            continue
-
-        try:
-            up_gb = float(input("Upload (GB): ").strip())
-            down_gb = float(input("Download (GB): ").strip())
-        except ValueError:
-            print(f"{RED}Invalid number entered.{RESET}")
-            continue
-
-        up_bytes = int(up_gb * 1024**3)
-        down_bytes = int(down_gb * 1024**3)
-
-        conn = connect_db()
-        cursor = conn.cursor()
+    removed = 0
+    for u in users:
         try:
             cursor.execute(
-                "UPDATE client_traffics SET up=?, down=? WHERE email=?",
-                (up_bytes, down_bytes, email),
+                "SELECT settings FROM inbounds WHERE id=?", (u["inbound_id"],)
             )
-            conn.commit()
-            if cursor.rowcount > 0:
-                print(
-                    f"{GREEN}Traffic updated for {email}: Upload={up_gb}GB, Download={down_gb}GB{RESET}"
-                )
-            else:
-                print(f"{RED}No client found with email '{email}'{RESET}")
+            row = cursor.fetchone()
+            if not row:
+                continue
+            settings = json.loads(row[0])
+            clients = settings.get("clients") or []
+            new_clients = [
+                c for c in clients if (c.get("email") or c.get("id")) != u["email"]
+            ]
+            if len(new_clients) == len(clients):
+                lowered = u["email"].lower() if isinstance(u["email"], str) else None
+                filtered = []
+                changed = False
+                for c in clients:
+                    candidate = c.get("email") or c.get("id") or ""
+                    if lowered and candidate.lower() == lowered:
+                        changed = True
+                    else:
+                        filtered.append(c)
+                if changed:
+                    new_clients = filtered
+                else:
+                    continue
+            settings["clients"] = new_clients
+            cursor.execute(
+                "UPDATE inbounds SET settings=? WHERE id=?",
+                (json.dumps(settings, ensure_ascii=False), u["inbound_id"]),
+            )
+            removed += 1
+            print(f"Removed {u['email']}")
         except Exception as e:
-            print(f"{RED}Failed to update traffic: {e}{RESET}")
-        finally:
-            conn.close()
-    email = input("Enter client email: ").strip()
-    if not email:
-        print(f"{RED}Email cannot be empty.{RESET}")
-        return
-    try:
-        up_gb = float(input("Upload (GB): ").strip())
-        down_gb = float(input("Download (GB): ").strip())
-    except ValueError:
-        print(f"{RED}Invalid number entered.{RESET}")
-        return
+            print(f"Failed to remove {u.get('email')}: {e}")
+            continue
+    conn.commit()
+    conn.close()
+    print(f"Deletion completed. Total removed attempts: {removed}")
 
-    up_bytes = int(up_gb * 1024**3)
-    down_bytes = int(down_gb * 1024**3)
 
-    conn = connect_db()
-    cursor = conn.cursor()
-    try:
-        cursor.execute(
-            "UPDATE client_traffics SET up=?, down=? WHERE email=?",
-            (up_bytes, down_bytes, email),
-        )
-        conn.commit()
-        if cursor.rowcount > 0:
-            print(
-                f"{GREEN}Traffic updated for {email}: Upload={up_gb}GB, Download={down_gb}GB{RESET}"
+# ------------------------- Display Tables ------------------------- #
+def show_table(users, not_started=False):
+    if not users:
+        print("No users found for this query.")
+        return
+    table = []
+    if not_started:
+        for u in users:
+            table.append([u["email"], u.get("port", "N/A"), "Not started"])
+        print(tabulate(table, headers=["Email", "Port", "Status"], tablefmt="grid"))
+    else:
+        for u in users:
+            exp_date = time.strftime(
+                "%Y-%m-%d %H:%M:%S", time.localtime(u["expiryTime"])
             )
-        else:
-            print(f"{RED}No client found with email '{email}'{RESET}")
-    except Exception as e:
-        print(f"{RED}Failed to update traffic: {e}{RESET}")
-    finally:
-        conn.close()
+            table.append(
+                [u["email"], u.get("port", "N/A"), exp_date, u["days_expired"]]
+            )
+        print(
+            tabulate(
+                table,
+                headers=["Email", "Port", "Expiry Time", "Days Expired"],
+                tablefmt="grid",
+            )
+        )
 
 
-# ---------------- Menus ----------------
+# ------------------------- Menus ------------------------- #
 def expired_users_menu():
+    inbound_id = select_inbound()
     while True:
         options = [
             "Show All Expired Users",
-            "Show Expired Users by Name",
-            "Delete Expired Users by Name",
+            "Show Expired Users Contain Specific Name",
+            "Show Expired Users More Than Some Days (Default:30)",
+            "Delete All Expired Users",
+            "Delete Expired Users Contain Specific Name",
+            "Delete Expired Users More Than Some Days (Default:30)",
         ]
         idx = menu_select(options, "Expired Users Management")
         if idx == 0:
             break
         elif idx == 1:
-            users = get_expired_users()
-            show_expired_users(users)
+            users = get_expired_users(inbound_id=inbound_id)
+            show_table(users)
         elif idx == 2:
-            name = input("Enter name filter: ").strip()
-            users = get_expired_users(name=name)
-            show_expired_users(users)
+            name = input("Enter name substring: ").strip()
+            users = get_expired_users(name=name, inbound_id=inbound_id)
+            show_table(users)
         elif idx == 3:
-            name = input("Enter name filter for deletion: ").strip()
-            users = get_expired_users(name=name)
-            emails = [u["email"] for u in users]
-            delete_users_by_email(emails)
+            days = input("Days (default 30): ").strip()
+            days = int(days) if days.isdigit() else 30
+            users = get_expired_users(days=days, inbound_id=inbound_id)
+            show_table(users)
+        elif idx == 4:
+            users = get_expired_users(inbound_id=inbound_id)
+            show_table(users)
+            if (
+                users
+                and input("Delete all expired users? (yes/no): ").strip().lower()
+                == "yes"
+            ):
+                delete_users(users)
+        elif idx == 5:
+            name = input("Enter name substring: ").strip()
+            users = get_expired_users(name=name, inbound_id=inbound_id)
+            show_table(users)
+            if (
+                users
+                and input(f"Delete expired users containing '{name}'? (yes/no): ")
+                .strip()
+                .lower()
+                == "yes"
+            ):
+                delete_users(users)
+        elif idx == 6:
+            days = input("Days (default 30): ").strip()
+            days = int(days) if days.isdigit() else 30
+            users = get_expired_users(days=days, inbound_id=inbound_id)
+            show_table(users)
+            if (
+                users
+                and input(f"Delete expired users older than {days} days? (yes/no): ")
+                .strip()
+                .lower()
+                == "yes"
+            ):
+                delete_users(users)
 
 
 def not_started_menu():
+    inbound_id = select_inbound()
     while True:
         options = [
             "Show Not-started Users",
-            "Delete Not-started Users by Name",
+            "Delete Not-started Users Contain Specific Name",
             "Delete All Not-started Users",
         ]
         idx = menu_select(options, "Not-started Users Management")
         if idx == 0:
             break
         elif idx == 1:
-            users = get_not_started_users()
-            show_not_started_users(users)
+            users = get_not_started_users(inbound_id=inbound_id)
+            show_table(users, not_started=True)
         elif idx == 2:
-            name = input("Enter name filter for deletion: ").strip()
-            users = get_not_started_users()
-            emails = [u["email"] for u in users if name.lower() in u["email"].lower()]
-            delete_users_by_email(emails)
+            name = input("Enter name substring: ").strip()
+            users = [
+                u
+                for u in get_not_started_users(inbound_id=inbound_id)
+                if name.lower() in (u["email"] or "").lower()
+            ]
+            show_table(users, not_started=True)
+            if (
+                users
+                and input(f"Delete not-started users containing '{name}'? (yes/no): ")
+                .strip()
+                .lower()
+                == "yes"
+            ):
+                delete_users(users)
         elif idx == 3:
-            users = get_not_started_users()
-            emails = [u["email"] for u in users]
-            delete_users_by_email(emails)
+            users = get_not_started_users(inbound_id=inbound_id)
+            show_table(users, not_started=True)
+            if (
+                users
+                and input("Delete ALL not-started users shown here? (yes/no): ")
+                .strip()
+                .lower()
+                == "yes"
+            ):
+                delete_users(users)
 
 
-def main_menu():
-    while True:
-        options = [
-            "Expired Users Management",
-            "Not-started Users Management",
-            "Update Client Traffic",
-            "Uninstall X-UI Management Tool",
-        ]
-        idx = menu_select(options, "X-UI Management Tool", is_main=True)
-        if idx == 0:
-            print(f"{RED}Bye.{RESET}")
-            sys.exit(0)
-        elif idx == 1:
-            expired_users_menu()
-        elif idx == 2:
-            not_started_menu()
-        elif idx == 3:
-            update_client_traffic()
-        elif idx == 4:
-            uninstall_tool()
-
-
-# ---------------- Uninstall ----------------
 def uninstall_tool():
-    print(f"{RED}Uninstalling X-UI Management Tool...{RESET}")
+    print("Uninstalling X-UI Management Tool...")
     script_path = "/opt/xuim/uninstall.sh"
     if os.path.isfile(script_path):
         os.system(f"bash {script_path}")
@@ -352,13 +365,31 @@ def uninstall_tool():
                 os.system("rm -rf /opt/xuim")
             if os.path.isfile("/usr/bin/xuim"):
                 os.remove("/usr/bin/xuim")
-            print(f"{GREEN}Uninstalled (best-effort).{RESET}")
+            print("Uninstalled (best-effort).")
         except Exception as e:
-            print(f"{RED}Uninstall failed: {e}{RESET}")
+            print(f"Uninstall failed: {e}")
     input("Press Enter to exit...")
     sys.exit(0)
 
 
-# ---------------- Run ----------------
+def main_menu():
+    while True:
+        options = [
+            "Expired Users Management",
+            "Not-started Users (expiryTime < 0)",
+            "Uninstall X-UI Management Tool",
+        ]
+        idx = menu_select(options, "X-UI Management Tool")
+        if idx == 0:
+            print("Bye.")
+            sys.exit(0)
+        elif idx == 1:
+            expired_users_menu()
+        elif idx == 2:
+            not_started_menu()
+        elif idx == 3:
+            uninstall_tool()
+
+
 if __name__ == "__main__":
     main_menu()
