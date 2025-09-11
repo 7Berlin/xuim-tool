@@ -235,6 +235,56 @@ def get_inactive_users(inbound_id=None):
 
 
 def delete_users(users):
+    """
+    Delete users completely from all inbounds and client_traffics.
+    users: list of dicts with keys 'email' and optionally 'inbound_id'
+    """
+    if not users:
+        print("No users to delete.")
+        return
+
+    emails_to_remove = set(u["email"] for u in users if u.get("email"))
+    if not emails_to_remove:
+        print("No valid emails to delete.")
+        return
+
+    conn = connect_db()
+    cursor = conn.cursor()
+    removed_count = 0
+
+    try:
+        # 1. Remove users from all inbounds
+        cursor.execute("SELECT id, settings FROM inbounds")
+        rows = cursor.fetchall()
+        for inbound_id, settings_json in rows:
+            try:
+                settings = json.loads(settings_json)
+            except Exception:
+                continue
+            clients = settings.get("clients") or []
+            new_clients = [
+                c
+                for c in clients
+                if (c.get("email") or c.get("id") or "") not in emails_to_remove
+            ]
+            if len(new_clients) < len(clients):
+                settings["clients"] = new_clients
+                cursor.execute(
+                    "UPDATE inbounds SET settings=? WHERE id=?",
+                    (json.dumps(settings, ensure_ascii=False), inbound_id),
+                )
+                removed_count += len(clients) - len(new_clients)
+
+        # 2. Remove from client_traffics
+        for email in emails_to_remove:
+            cursor.execute("DELETE FROM client_traffics WHERE email=?", (email,))
+        conn.commit()
+        print(f"✅ Deleted {removed_count} users and removed their traffic records.")
+
+    except Exception as e:
+        print(f"Failed to delete users: {e}")
+    finally:
+        conn.close()
     if not users:
         print("No users to delete.")
         return
