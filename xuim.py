@@ -572,7 +572,7 @@ def give_days_to_clients():
         days = int(days_input)
 
         name_filter = None
-        if idx == 2 or idx == 4:  # Subtract options
+        if idx in [3, 4]:  # Subtract options
             days = -days
         if idx == 2 or idx == 4:  # Name-specific options
             name_filter = input("Enter name substring to filter: ").strip()
