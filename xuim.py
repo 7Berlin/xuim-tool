@@ -478,20 +478,29 @@ def update_client_traffic():
             new_down = int(float(down_gb) * 1073741824) if down_gb else 0
             new_up = int(float(up_gb) * 1073741824) if up_gb else 0
 
-            # 1. آپدیت client_traffics
+            # 1. خواندن مقادیر فعلی
             cursor.execute(
-                "SELECT all_time FROM client_traffics WHERE email=?", (email,)
+                "SELECT up, down, all_time FROM client_traffics WHERE email=?", (email,)
             )
             row = cursor.fetchone()
-            current_all_time = row[0] if row else 0
-            new_all_time = current_all_time + new_up + new_down
+            if not row:
+                print(f"⚠️ No record found for {email}")
+                continue
 
+            current_up, current_down, current_all_time = row
+
+            # 2. محاسبه مقدار جدید all_time
+            new_all_time = (
+                current_all_time + (new_up - current_up) + (new_down - current_down)
+            )
+
+            # 3. آپدیت client_traffics
             cursor.execute(
                 "UPDATE client_traffics SET up=?, down=?, all_time=? WHERE email=?",
                 (new_up, new_down, new_all_time, email),
             )
 
-            # 2. آپدیت inbounds
+            # 4. آپدیت inbounds
             cursor.execute("SELECT id, settings FROM inbounds")
             for inbound_id, settings_json in cursor.fetchall():
                 try:
