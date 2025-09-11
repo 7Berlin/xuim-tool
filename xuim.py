@@ -243,6 +243,44 @@ def delete_users(users):
     removed = 0
     for u in users:
         try:
+            # حذف کاربر از inbounds
+            cursor.execute(
+                "SELECT settings FROM inbounds WHERE id=?", (u["inbound_id"],)
+            )
+            row = cursor.fetchone()
+            if row:
+                settings = json.loads(row[0])
+                clients = settings.get("clients") or []
+                new_clients = [
+                    c for c in clients if (c.get("email") or c.get("id")) != u["email"]
+                ]
+                if len(new_clients) < len(clients):
+                    settings["clients"] = new_clients
+                    cursor.execute(
+                        "UPDATE inbounds SET settings=? WHERE id=?",
+                        (json.dumps(settings, ensure_ascii=False), u["inbound_id"]),
+                    )
+                    removed += 1
+                    print(f"Removed {u['email']} from inbounds")
+
+            # حذف رکوردهای ترافیک مرتبط در client_traffics
+            cursor.execute("DELETE FROM client_traffics WHERE email=?", (u["email"],))
+            conn.commit()
+            print(f"Removed {u['email']} from client_traffics")
+        except Exception as e:
+            print(f"Failed to remove {u.get('email')}: {e}")
+            continue
+
+    conn.close()
+    print(f"Deletion completed. Total removed attempts: {removed}")
+    if not users:
+        print("No users to delete.")
+        return
+    conn = connect_db()
+    cursor = conn.cursor()
+    removed = 0
+    for u in users:
+        try:
             # حذف از inbounds
             cursor.execute(
                 "SELECT settings FROM inbounds WHERE id=?", (u["inbound_id"],)
