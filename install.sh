@@ -3,6 +3,7 @@ set -e
 
 echo "📦 Installing requirements..."
 apt update && apt install -y python3 python3-pip git
+pip3 install --upgrade pip
 pip3 install tabulate
 
 echo "📥 Cloning repository..."
@@ -13,7 +14,7 @@ chmod +x /opt/xuim/xuim.py
 chmod +x /opt/xuim/uninstall.sh
 
 echo "⚙️ Creating xuim command..."
-cat <<EOF >/usr/bin/xuim
+cat <<'EOF' >/usr/bin/xuim
 #!/bin/bash
 exec python3 /opt/xuim/xuim.py "$@"
 EOF
