@@ -543,6 +543,86 @@ def update_client_traffic():
     conn.close()
 
 
+# ------------------------- Give Days ------------------------- #
+
+
+def give_days_to_clients_menu():
+    inbound_id = select_inbound()
+    while True:
+        options = [
+            "Add days to all active users",
+            "Add days to active users with specific name",
+            "Subtract days from all active users",
+            "Subtract days from active users with specific name",
+        ]
+        idx = menu_select(options, "Give/Remove Days to Clients")
+        if idx == 0:
+            break
+
+        try:
+            days_input = input("Enter number of days: ").strip()
+            days = int(days_input)
+        except ValueError:
+            print("Invalid number of days.")
+            continue
+
+        conn = connect_db()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute(
+                "SELECT id, settings, port FROM inbounds"
+                + (" WHERE id=?" if inbound_id else ""),
+                (inbound_id,) if inbound_id else (),
+            )
+            inbounds = cursor.fetchall()
+
+            name_filter = None
+            if idx in [2, 4]:  # Subtracting days
+                days = -days
+            if idx in [2, 4]:
+                days = -days
+
+            if idx in [2, 4]:  # Options 2 and 4 are name-specific
+                name_filter = input("Enter name substring to filter: ").strip().lower()
+
+            updated_users = 0
+            for inbound_id_row, settings_json, port in inbounds:
+                try:
+                    settings = json.loads(settings_json)
+                except Exception:
+                    continue
+                clients = settings.get("clients") or []
+                modified = False
+                for client in clients:
+                    expiry_sec = client.get("expiryTime", 0) // 1000
+                    if expiry_sec <= 0 or expiry_sec < int(time.time()):
+                        continue  # Skip expired users
+
+                    email = (client.get("email") or client.get("id") or "").lower()
+                    if name_filter and name_filter not in email:
+                        continue
+
+                    client["expiryTime"] = (
+                        client.get("expiryTime", 0) + days * 24 * 3600 * 1000
+                    )
+                    modified = True
+                    updated_users += 1
+
+                if modified:
+                    cursor.execute(
+                        "UPDATE inbounds SET settings=? WHERE id=?",
+                        (json.dumps(settings, ensure_ascii=False), inbound_id_row),
+                    )
+
+            conn.commit()
+            print(f"✅ Updated expiry time for {updated_users} users.")
+        except Exception as e:
+            print(f"❌ Failed to update users: {e}")
+        finally:
+            conn.close()
+
+
 # ------------------------- Menus ------------------------- #
 def expired_users_menu():
     inbound_id = select_inbound()
@@ -734,6 +814,7 @@ def main_menu():
             "Unlimited Users",
             "Inactive Users",
             "Update Client Traffic",
+            "Give/Remove Days To Clients",
             "",
             "Uninstall X-UI Management Tool",
         ]
@@ -751,30 +832,9 @@ def main_menu():
             inactive_menu()
         elif idx == 5:
             update_client_traffic()
-        elif idx == 7:
-            uninstall_tool()
-    while True:
-        options = [
-            "Expired Users Management",
-            "Not-started Users (expiryTime < 0)",
-            "Unlimited Users",
-            "Inactive Users",
-            "",
-            "Uninstall X-UI Management Tool",
-        ]
-        idx = menu_select(options, "X-UI Management Tool")
-        if idx == 0:
-            print("Bye.")
-            sys.exit(0)
-        elif idx == 1:
-            expired_users_menu()
-        elif idx == 2:
-            not_started_menu()
-        elif idx == 3:
-            unlimited_menu()
-        elif idx == 4:
-            inactive_menu()
         elif idx == 6:
+            give_days_to_clients_menu()
+        elif idx == 7:
             uninstall_tool()
 
 
