@@ -548,9 +548,11 @@ def update_client_traffic():
 
 def give_days_to_clients():
     print("\n\033[1;36mGive / Subtract Days To Clients\033[0m\n")
-    inbound_id = select_inbound()
-    if inbound_id is None:
-        return
+    inbounds_selected = select_inbound()
+    if inbounds_selected is None:
+        inbounds_ids = [i[0] for i in list_inbounds()]  # همه inbounds
+    else:
+        inbounds_ids = [inbounds_selected]
 
     while True:
         options = [
@@ -578,42 +580,40 @@ def give_days_to_clients():
         conn = connect_db()
         cursor = conn.cursor()
         try:
-            cursor.execute(
-                "SELECT id, settings FROM inbounds WHERE id=?", (inbound_id,)
-            )
-            row = cursor.fetchone()
-            if not row:
-                print("Inbound not found.")
-                continue
-            inbound_id_row, settings_json = row
-            settings = json.loads(settings_json)
-            modified = False
-            clients = settings.get("clients") or []
-
-            for client in clients:
-                expiry_ms = client.get("expiryTime", 0) or 0
-                expiry_sec = expiry_ms // 1000
-                if expiry_sec <= now:
-                    continue  # skip expired clients
-                email = client.get("email") or client.get("id") or "<no-email>"
-                if name_filter and name_filter.lower() not in email.lower():
-                    continue
-                # update expiryTime
-                new_expiry_sec = expiry_sec + days * 24 * 3600
-                if new_expiry_sec < now:
-                    new_expiry_sec = now  # don't allow past date
-                client["expiryTime"] = new_expiry_sec * 1000
-                modified = True
-
-            if modified:
+            for inbound_id in inbounds_ids:
                 cursor.execute(
-                    "UPDATE inbounds SET settings=? WHERE id=?",
-                    (json.dumps(settings, ensure_ascii=False), inbound_id_row),
+                    "SELECT id, settings FROM inbounds WHERE id=?", (inbound_id,)
                 )
-                conn.commit()
-                print(f"✅ Updated expiry for applicable clients by {days} days.")
-            else:
-                print("No clients matched the criteria.")
+                row = cursor.fetchone()
+                if not row:
+                    continue
+                inbound_id_row, settings_json = row
+                settings = json.loads(settings_json)
+                modified = False
+                clients = settings.get("clients") or []
+
+                for client in clients:
+                    expiry_ms = client.get("expiryTime", 0) or 0
+                    expiry_sec = expiry_ms // 1000
+                    if expiry_sec <= now:
+                        continue  # skip expired clients
+                    email = client.get("email") or client.get("id") or "<no-email>"
+                    if name_filter and name_filter.lower() not in email.lower():
+                        continue
+                    # update expiryTime
+                    new_expiry_sec = expiry_sec + days * 24 * 3600
+                    if new_expiry_sec < now:
+                        new_expiry_sec = now  # don't allow past date
+                    client["expiryTime"] = new_expiry_sec * 1000
+                    modified = True
+
+                if modified:
+                    cursor.execute(
+                        "UPDATE inbounds SET settings=? WHERE id=?",
+                        (json.dumps(settings, ensure_ascii=False), inbound_id_row),
+                    )
+            conn.commit()
+            print(f"✅ Updated expiry for applicable clients by {days} days.")
 
         except Exception as e:
             print(f"❌ Failed to update clients: {e}")
