@@ -476,19 +476,18 @@ def update_client_traffic():
             down_gb = input("Enter download traffic in GB: ").strip()
             up_gb = input("Enter upload traffic in GB: ").strip()
 
-            down = int(float(down_gb) * 1073741824) if down_gb else 0
-            up = int(float(up_gb) * 1073741824) if up_gb else 0
+            new_down = int(float(down_gb) * 1073741824) if down_gb else 0
+            new_up = int(float(up_gb) * 1073741824) if up_gb else 0
 
-            # --- 1. آپدیت client_traffics ---
+            # --- 1. آپدیت client_traffics و محاسبه تغییر برای all_time ---
             cursor.execute(
                 "SELECT up, down, all_time FROM client_traffics WHERE email=?", (email,)
             )
             row = cursor.fetchone()
             if row:
-                current_up, current_down, current_all_time = row
-                new_up = current_up + up
-                new_down = current_down + down
-                new_all_time = current_all_time + up + down
+                old_up, old_down, old_all_time = row
+                delta = (new_up - old_up) + (new_down - old_down)
+                new_all_time = max(old_all_time + delta, 0)  # جلوگیری از منفی شدن
                 cursor.execute(
                     "UPDATE client_traffics SET up=?, down=?, all_time=? WHERE email=?",
                     (new_up, new_down, new_all_time, email),
@@ -497,10 +496,10 @@ def update_client_traffic():
                 # ایجاد رکورد جدید در صورت وجود نداشتن
                 cursor.execute(
                     "INSERT INTO client_traffics (email, up, down, all_time) VALUES (?, ?, ?, ?)",
-                    (email, up, down, up + down),
+                    (email, new_up, new_down, new_up + new_down),
                 )
 
-            # --- 2. آپدیت All-time traffic در inbounds ---
+            # --- 2. آپدیت totalUp / totalDown در inbounds ---
             cursor.execute("SELECT id, settings FROM inbounds")
             inbounds = cursor.fetchall()
             for inbound_id, settings in inbounds:
@@ -510,8 +509,19 @@ def update_client_traffic():
                     if "clients" in settings_json:
                         for client in settings_json["clients"]:
                             if client.get("email") == email:
-                                client["totalDown"] = client.get("totalDown", 0) + down
-                                client["totalUp"] = client.get("totalUp", 0) + up
+                                old_total_down = client.get("totalDown", 0)
+                                old_total_up = client.get("totalUp", 0)
+
+                                delta_down = new_down - old_total_down
+                                delta_up = new_up - old_total_up
+
+                                client["totalDown"] = new_down
+                                client["totalUp"] = new_up
+
+                                # all_time را جمع/کم کن
+                                client["all_time"] = max(
+                                    client.get("all_time", 0) + delta_down + delta_up, 0
+                                )
                                 modified = True
                     if modified:
                         cursor.execute(
@@ -523,7 +533,7 @@ def update_client_traffic():
 
             conn.commit()
             print(
-                f"✅ Updated traffic for {email} (Added Down: {down_gb} GB, Up: {up_gb} GB)"
+                f"✅ Updated traffic for {email} (Down: {down_gb} GB, Up: {up_gb} GB)"
             )
 
         except Exception as e:
