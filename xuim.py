@@ -547,80 +547,74 @@ def update_client_traffic():
 
 
 def give_days_to_clients_menu():
-    inbound_id = select_inbound()
+    print("\n\033[1;36mGive Days To Clients\033[0m\n")
+    conn = connect_db()
+    cursor = conn.cursor()
+
     while True:
         options = [
-            "Add days to all active users",
-            "Add days to active users with specific name",
-            "Subtract days from all active users",
-            "Subtract days from active users with specific name",
+            "Add days to all non-expired clients",
+            "Add days to non-expired clients containing a name",
+            "Subtract days from all non-expired clients",
+            "Subtract days from non-expired clients containing a name",
         ]
-        idx = menu_select(options, "Give/Remove Days to Clients")
+        idx = menu_select(options, "Give Days To Clients")
         if idx == 0:
             break
 
-        try:
-            days_input = input("Enter number of days: ").strip()
-            days = int(days_input)
-        except ValueError:
-            print("Invalid number of days.")
+        days_input = input("Enter number of days: ").strip()
+        if not days_input.isdigit():
+            print("Invalid number, try again.")
             continue
+        days = int(days_input)
 
-        conn = connect_db()
-        cursor = conn.cursor()
+        name_filter = None
+        if idx in [2, 4]:  # Subtracting days
+            days = -days
+        if idx in [2, 4]:  # Name-specific
+            name_filter = input("Enter name substring to filter: ").strip()
 
         try:
-            cursor.execute(
-                "SELECT id, settings, port FROM inbounds"
-                + (" WHERE id=?" if inbound_id else ""),
-                (inbound_id,) if inbound_id else (),
-            )
+            cursor.execute("SELECT id, settings FROM inbounds")
             inbounds = cursor.fetchall()
+            updated_count = 0
 
-            name_filter = None
-            if idx in [2, 4]:  # Subtracting days
-                days = -days
-            if idx in [2, 4]:
-                days = -days
-
-            if idx in [2, 4]:  # Options 2 and 4 are name-specific
-                name_filter = input("Enter name substring to filter: ").strip().lower()
-
-            updated_users = 0
-            for inbound_id_row, settings_json, port in inbounds:
+            for inbound_id, settings_json in inbounds:
                 try:
                     settings = json.loads(settings_json)
                 except Exception:
                     continue
                 clients = settings.get("clients") or []
                 modified = False
+
                 for client in clients:
-                    expiry_sec = client.get("expiryTime", 0) // 1000
-                    if expiry_sec <= 0 or expiry_sec < int(time.time()):
+                    expiry_ms = client.get("expiryTime", 0) or 0
+                    expiry_sec = expiry_ms // 1000
+                    if expiry_sec <= int(time.time()):
                         continue  # Skip expired users
 
-                    email = (client.get("email") or client.get("id") or "").lower()
-                    if name_filter and name_filter not in email:
-                        continue
+                    email = client.get("email") or client.get("id") or ""
+                    if name_filter and name_filter.lower() not in email.lower():
+                        continue  # Skip if name does not match
 
-                    client["expiryTime"] = (
-                        client.get("expiryTime", 0) + days * 24 * 3600 * 1000
-                    )
+                    # Apply change
+                    client["expiryTime"] = expiry_ms + days * 24 * 3600 * 1000
                     modified = True
-                    updated_users += 1
+                    updated_count += 1
 
                 if modified:
                     cursor.execute(
                         "UPDATE inbounds SET settings=? WHERE id=?",
-                        (json.dumps(settings, ensure_ascii=False), inbound_id_row),
+                        (json.dumps(settings, ensure_ascii=False), inbound_id),
                     )
 
             conn.commit()
-            print(f"✅ Updated expiry time for {updated_users} users.")
+            print(f"✅ Updated expiryTime for {updated_count} client(s).")
+
         except Exception as e:
-            print(f"❌ Failed to update users: {e}")
-        finally:
-            conn.close()
+            print(f"❌ Failed to update clients: {e}")
+
+    conn.close()
 
 
 # ------------------------- Menus ------------------------- #
