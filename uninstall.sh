@@ -17,3 +17,5 @@ if [ -d "$INSTALL_DIR" ]; then
 fi
 
 echo "Uninstallation completed."
+echo "You can install it with:"
+echo "bash <(curl -s https://raw.githubusercontent.com/7berlin/xuim-tool/main/install.sh)"

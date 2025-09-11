@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import sqlite3
 import json
 import time
@@ -34,12 +33,12 @@ def list_inbounds():
 
 # ------------------------- Menu ------------------------- #
 def menu_select(options, title="Menu"):
-    print("\033[1;36m" + title + "\033[0m\n")  # Cyan title
+    print("\033[1;36m" + title + "\033[0m\n")
     for idx, option in enumerate(options, start=1):
-        print(f"\033[1;33m{idx}.\033[0m {option}")  # Yellow numbers
+        print(f"\033[1;33m{idx}.\033[0m {option}")
     print(
         f"\033[1;31m0.\033[0m {'Exit' if title == 'X-UI Management Tool' else 'Back'}"
-    )  # Red 0 option
+    )
     choice = input("\nEnter number: ").strip()
     if choice.isdigit():
         idx = int(choice)
@@ -253,7 +252,6 @@ def delete_users(users):
     removed_count = 0
 
     try:
-        # 1. Remove users from all inbounds
         cursor.execute("SELECT id, settings FROM inbounds")
         rows = cursor.fetchall()
         for inbound_id, settings_json in rows:
@@ -275,7 +273,6 @@ def delete_users(users):
                 )
                 removed_count += len(clients) - len(new_clients)
 
-        # 2. Remove from client_traffics
         for email in emails_to_remove:
             cursor.execute("DELETE FROM client_traffics WHERE email=?", (email,))
         conn.commit()
@@ -293,7 +290,6 @@ def delete_users(users):
     removed = 0
     for u in users:
         try:
-            # حذف کاربر از inbounds
             cursor.execute(
                 "SELECT settings FROM inbounds WHERE id=?", (u["inbound_id"],)
             )
@@ -313,7 +309,6 @@ def delete_users(users):
                     removed += 1
                     print(f"Removed {u['email']} from inbounds")
 
-            # حذف رکوردهای ترافیک مرتبط در client_traffics
             cursor.execute("DELETE FROM client_traffics WHERE email=?", (u["email"],))
             conn.commit()
             print(f"Removed {u['email']} from client_traffics")
@@ -331,7 +326,6 @@ def delete_users(users):
     removed = 0
     for u in users:
         try:
-            # حذف از inbounds
             cursor.execute(
                 "SELECT settings FROM inbounds WHERE id=?", (u["inbound_id"],)
             )
@@ -348,7 +342,6 @@ def delete_users(users):
                     (json.dumps(settings, ensure_ascii=False), u["inbound_id"]),
                 )
 
-            # حذف از client_traffics
             cursor.execute("DELETE FROM client_traffics WHERE email=?", (u["email"],))
 
             removed += 1
@@ -367,7 +360,6 @@ def delete_users(users):
     removed = 0
     for u in users:
         try:
-            # پاک کردن از inbounds
             cursor.execute(
                 "SELECT settings FROM inbounds WHERE id=?", (u["inbound_id"],)
             )
@@ -387,7 +379,6 @@ def delete_users(users):
                     removed += 1
                     print(f"Removed {u['email']} from inbound {u['inbound_id']}")
 
-            # پاک کردن از client_traffics
             cursor.execute("DELETE FROM client_traffics WHERE email=?", (u["email"],))
             conn.commit()
         except Exception as e:
@@ -451,7 +442,7 @@ def show_table(users, status="expired"):
         for u in users:
             table.append([u["email"], u["port"], "Not started"])
         print(tabulate(table, headers=["Email", "Port", "Status"], tablefmt="grid"))
-    else:  # unlimited or inactive
+    else:
         for u in users:
             table.append([u["email"], u["port"]])
         print(tabulate(table, headers=["Email", "Port"], tablefmt="grid"))
@@ -472,14 +463,12 @@ def update_client_traffic():
             continue
 
         try:
-            # گرفتن ورودی از کاربر
             down_gb = input("Enter download traffic in GB: ").strip()
             up_gb = input("Enter upload traffic in GB: ").strip()
 
             down = int(float(down_gb) * 1073741824) if down_gb else 0
             up = int(float(up_gb) * 1073741824) if up_gb else 0
 
-            # --- 1. آپدیت client_traffics ---
             cursor.execute(
                 "SELECT down, up, all_time FROM client_traffics WHERE email=?",
                 (email,),
@@ -495,13 +484,11 @@ def update_client_traffic():
                     (down, up, new_all_time, email),
                 )
             else:
-                # اگر رکورد وجود ندارد، مقدار all_time = up + down
                 cursor.execute(
                     "INSERT INTO client_traffics (email, down, up, all_time) VALUES (?, ?, ?, ?)",
                     (email, down, up, down + up),
                 )
 
-            # --- 2. آپدیت All-time traffic در inbounds ---
             cursor.execute("SELECT id, settings FROM inbounds")
             inbounds = cursor.fetchall()
             for inbound_id, settings in inbounds:
@@ -550,7 +537,7 @@ def give_days_to_clients():
     print("\n\033[1;36mGive / Subtract Days To Clients\033[0m\n")
     inbounds_selected = select_inbound()
     if inbounds_selected is None:
-        inbounds_ids = [i[0] for i in list_inbounds()]  # همه inbounds
+        inbounds_ids = [i[0] for i in list_inbounds()]
     else:
         inbounds_ids = [inbounds_selected]
 
@@ -572,9 +559,9 @@ def give_days_to_clients():
         days = int(days_input)
 
         name_filter = None
-        if idx in [3, 4]:  # Subtract options
+        if idx in [3, 4]:
             days = -days
-        if idx == 2 or idx == 4:  # Name-specific options
+        if idx == 2 or idx == 4:
             name_filter = input("Enter name substring to filter: ").strip()
 
         conn = connect_db()
@@ -596,14 +583,13 @@ def give_days_to_clients():
                     expiry_ms = client.get("expiryTime", 0) or 0
                     expiry_sec = expiry_ms // 1000
                     if expiry_sec <= now:
-                        continue  # skip expired clients
+                        continue
                     email = client.get("email") or client.get("id") or "<no-email>"
                     if name_filter and name_filter.lower() not in email.lower():
                         continue
-                    # update expiryTime
                     new_expiry_sec = expiry_sec + days * 24 * 3600
                     if new_expiry_sec < now:
-                        new_expiry_sec = now  # don't allow past date
+                        new_expiry_sec = now
                     client["expiryTime"] = new_expiry_sec * 1000
                     modified = True
 
@@ -808,7 +794,7 @@ def main_menu():
     while True:
         options = [
             "Expired Users Management",
-            "Not-started Users (expiryTime < 0)",
+            "Not-started Users (Start After First Use)",
             "Unlimited Users",
             "Inactive Users",
             "Update Client Traffic",
@@ -818,7 +804,7 @@ def main_menu():
         ]
         idx = menu_select(options, "X-UI Management Tool")
         if idx == 0:
-            print("Bye.")
+            print("You can use xuim for run it again.")
             sys.exit(0)
         elif idx == 1:
             expired_users_menu()
