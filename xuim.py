@@ -481,9 +481,24 @@ def update_client_traffic():
 
             # --- 1. آپدیت client_traffics ---
             cursor.execute(
-                "UPDATE client_traffics SET down=?, up=? WHERE email=?",
-                (down, up, email),
+                "SELECT up, down, all_time FROM client_traffics WHERE email=?", (email,)
             )
+            row = cursor.fetchone()
+            if row:
+                current_up, current_down, current_all_time = row
+                new_up = current_up + up
+                new_down = current_down + down
+                new_all_time = current_all_time + up + down
+                cursor.execute(
+                    "UPDATE client_traffics SET up=?, down=?, all_time=? WHERE email=?",
+                    (new_up, new_down, new_all_time, email),
+                )
+            else:
+                # ایجاد رکورد جدید در صورت وجود نداشتن
+                cursor.execute(
+                    "INSERT INTO client_traffics (email, up, down, all_time) VALUES (?, ?, ?, ?)",
+                    (email, up, down, up + down),
+                )
 
             # --- 2. آپدیت All-time traffic در inbounds ---
             cursor.execute("SELECT id, settings FROM inbounds")
@@ -495,24 +510,21 @@ def update_client_traffic():
                     if "clients" in settings_json:
                         for client in settings_json["clients"]:
                             if client.get("email") == email:
-                                client["totalDown"] = down
-                                client["totalUp"] = up
+                                client["totalDown"] = client.get("totalDown", 0) + down
+                                client["totalUp"] = client.get("totalUp", 0) + up
                                 modified = True
                     if modified:
                         cursor.execute(
                             "UPDATE inbounds SET settings=? WHERE id=?",
-                            (json.dumps(settings_json), inbound_id),
+                            (json.dumps(settings_json, ensure_ascii=False), inbound_id),
                         )
                 except Exception:
                     continue
 
             conn.commit()
-            if cursor.rowcount > 0:
-                print(
-                    f"✅ Updated traffic for {email} (Down: {down_gb} GB, Up: {up_gb} GB)"
-                )
-            else:
-                print(f"⚠️ No record found for {email}")
+            print(
+                f"✅ Updated traffic for {email} (Added Down: {down_gb} GB, Up: {up_gb} GB)"
+            )
 
         except Exception as e:
             print(f"❌ Failed to update traffic: {e}")
