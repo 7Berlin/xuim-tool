@@ -472,68 +472,56 @@ def update_client_traffic():
             continue
 
         try:
-            # گرفتن ورودی از کاربر
             down_gb = input("Enter download traffic in GB: ").strip()
             up_gb = input("Enter upload traffic in GB: ").strip()
 
+            # تبدیل به بایت
             new_down = int(float(down_gb) * 1073741824) if down_gb else 0
             new_up = int(float(up_gb) * 1073741824) if up_gb else 0
 
-            # --- 1. آپدیت client_traffics و محاسبه تغییر برای all_time ---
+            # 1. گرفتن مقادیر قبلی از client_traffics
             cursor.execute(
                 "SELECT up, down, all_time FROM client_traffics WHERE email=?", (email,)
             )
             row = cursor.fetchone()
-            if row:
-                old_up, old_down, old_all_time = row
-                delta = (new_up - old_up) + (new_down - old_down)
-                new_all_time = max(old_all_time + delta, 0)  # جلوگیری از منفی شدن
-                cursor.execute(
-                    "UPDATE client_traffics SET up=?, down=?, all_time=? WHERE email=?",
-                    (new_up, new_down, new_all_time, email),
-                )
-            else:
-                # ایجاد رکورد جدید در صورت وجود نداشتن
-                cursor.execute(
-                    "INSERT INTO client_traffics (email, up, down, all_time) VALUES (?, ?, ?, ?)",
-                    (email, new_up, new_down, new_up + new_down),
-                )
+            if not row:
+                print(f"⚠️ No record found for {email}")
+                continue
 
-            # --- 2. آپدیت totalUp / totalDown در inbounds ---
+            old_up, old_down, old_all_time = row
+            delta = (new_up - old_up) + (new_down - old_down)
+            new_all_time = old_all_time + delta
+
+            # 2. آپدیت client_traffics
+            cursor.execute(
+                "UPDATE client_traffics SET up=?, down=?, all_time=? WHERE email=?",
+                (new_up, new_down, new_all_time, email),
+            )
+
+            # 3. آپدیت مقادیر در inbounds
             cursor.execute("SELECT id, settings FROM inbounds")
-            inbounds = cursor.fetchall()
-            for inbound_id, settings in inbounds:
+            for inbound_id, settings_json in cursor.fetchall():
                 try:
-                    settings_json = json.loads(settings)
+                    settings = json.loads(settings_json)
                     modified = False
-                    if "clients" in settings_json:
-                        for client in settings_json["clients"]:
-                            if client.get("email") == email:
-                                old_total_down = client.get("totalDown", 0)
-                                old_total_up = client.get("totalUp", 0)
-
-                                delta_down = new_down - old_total_down
-                                delta_up = new_up - old_total_up
-
-                                client["totalDown"] = new_down
-                                client["totalUp"] = new_up
-
-                                # all_time را جمع/کم کن
-                                client["all_time"] = max(
-                                    client.get("all_time", 0) + delta_down + delta_up, 0
-                                )
-                                modified = True
+                    for client in settings.get("clients", []):
+                        if client.get("email") == email:
+                            # فقط مقدار up, down و all_time را به روز می‌کنیم
+                            client["up"] = new_up
+                            client["down"] = new_down
+                            client["all_time"] = new_all_time
+                            modified = True
                     if modified:
                         cursor.execute(
                             "UPDATE inbounds SET settings=? WHERE id=?",
-                            (json.dumps(settings_json, ensure_ascii=False), inbound_id),
+                            (json.dumps(settings, ensure_ascii=False), inbound_id),
                         )
                 except Exception:
                     continue
 
             conn.commit()
             print(
-                f"✅ Updated traffic for {email} (Down: {down_gb} GB, Up: {up_gb} GB)"
+                f"✅ Updated {email}: Down={down_gb} GB, Up={up_gb} GB, All-time={new_all_time / 1073741824:.2f} GB"
             )
 
         except Exception as e:
