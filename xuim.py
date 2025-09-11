@@ -457,6 +457,46 @@ def show_table(users, status="expired"):
         print(tabulate(table, headers=["Email", "Port"], tablefmt="grid"))
 
 
+# ------------------------- Update Client Traffic ------------------------- #
+def update_client_traffic():
+    print("\n\033[1;36mUpdate Client Traffic (Upload & Download)\033[0m\n")
+    conn = connect_db()
+    cursor = conn.cursor()
+
+    while True:
+        email = input("Enter client email (or 0 to go back): ").strip()
+        if email == "0":
+            break
+        if not email:
+            print("Email cannot be empty.")
+            continue
+
+        try:
+            # گرفتن ترافیک از کاربر به گیگابایت
+            down_gb = input("Enter download traffic in GB: ").strip()
+            up_gb = input("Enter upload traffic in GB: ").strip()
+
+            down = int(float(down_gb) * 1073741824) if down_gb else 0
+            up = int(float(up_gb) * 1073741824) if up_gb else 0
+
+            cursor.execute(
+                "UPDATE client_traffics SET down=?, up=? WHERE email=?",
+                (down, up, email),
+            )
+            conn.commit()
+            if cursor.rowcount > 0:
+                print(
+                    f"✅ Updated traffic for {email} (Down: {down_gb} GB, Up: {up_gb} GB)"
+                )
+            else:
+                print(f"⚠️ No record found for {email}")
+
+        except Exception as e:
+            print(f"❌ Failed to update traffic: {e}")
+
+    conn.close()
+
+
 # ------------------------- Menus ------------------------- #
 def expired_users_menu():
     inbound_id = select_inbound()
@@ -641,6 +681,32 @@ def uninstall_tool():
 
 # ------------------------- Main Menu ------------------------- #
 def main_menu():
+    while True:
+        options = [
+            "Expired Users Management",
+            "Not-started Users (expiryTime < 0)",
+            "Unlimited Users",
+            "Inactive Users",
+            "Update Client Traffic",
+            "",
+            "Uninstall X-UI Management Tool",
+        ]
+        idx = menu_select(options, "X-UI Management Tool")
+        if idx == 0:
+            print("Bye.")
+            sys.exit(0)
+        elif idx == 1:
+            expired_users_menu()
+        elif idx == 2:
+            not_started_menu()
+        elif idx == 3:
+            unlimited_menu()
+        elif idx == 4:
+            inactive_menu()
+        elif idx == 5:
+            update_client_traffic()
+        elif idx == 7:
+            uninstall_tool()
     while True:
         options = [
             "Expired Users Management",
