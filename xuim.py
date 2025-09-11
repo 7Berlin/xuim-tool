@@ -478,27 +478,15 @@ def update_client_traffic():
             # تبدیل به بایت
             new_down = int(float(down_gb) * 1073741824) if down_gb else 0
             new_up = int(float(up_gb) * 1073741824) if up_gb else 0
+            new_all_time = new_up + new_down  # جمع up و down
 
-            # 1. گرفتن مقادیر قبلی از client_traffics
-            cursor.execute(
-                "SELECT up, down, all_time FROM client_traffics WHERE email=?", (email,)
-            )
-            row = cursor.fetchone()
-            if not row:
-                print(f"⚠️ No record found for {email}")
-                continue
-
-            old_up, old_down, old_all_time = row
-            delta = (new_up - old_up) + (new_down - old_down)
-            new_all_time = old_all_time + delta
-
-            # 2. آپدیت client_traffics
+            # 1. آپدیت client_traffics
             cursor.execute(
                 "UPDATE client_traffics SET up=?, down=?, all_time=? WHERE email=?",
                 (new_up, new_down, new_all_time, email),
             )
 
-            # 3. آپدیت مقادیر در inbounds
+            # 2. آپدیت inbounds
             cursor.execute("SELECT id, settings FROM inbounds")
             for inbound_id, settings_json in cursor.fetchall():
                 try:
@@ -506,7 +494,6 @@ def update_client_traffic():
                     modified = False
                     for client in settings.get("clients", []):
                         if client.get("email") == email:
-                            # فقط مقدار up, down و all_time را به روز می‌کنیم
                             client["up"] = new_up
                             client["down"] = new_down
                             client["all_time"] = new_all_time
