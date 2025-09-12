@@ -33,13 +33,20 @@ def list_inbounds():
 
 
 # ------------------------- Menu ------------------------- #
-def menu_select(options, title="Menu"):
+def menu_select(options, title="Menu", gap_after=None):
+    if gap_after is None:
+        gap_after = [6, 8]
+
     print("\033[1;36m" + title + "\033[0m\n")
     for idx, option in enumerate(options, start=1):
         print(f"\033[1;33m{idx}.\033[0m {option}")
+        if idx in gap_after:
+            print()
+
     print(
         f"\033[1;31m0.\033[0m {'Exit' if title == 'X-UI Management Tool' else 'Back'}"
     )
+
     choice = input("\nEnter number: ").strip()
     if choice.isdigit():
         idx = int(choice)
@@ -48,7 +55,7 @@ def menu_select(options, title="Menu"):
         elif 1 <= idx <= len(options):
             return idx
     print("Invalid choice, try again.")
-    return menu_select(options, title)
+    return menu_select(options, title, gap_after)
 
 
 # ------------------------- Inbound Selection ------------------------- #
@@ -691,11 +698,10 @@ def main_menu():
             "Inactive Users",
             "Update Client Traffic",
             "Give/Remove Days To Clients",
-            "",
             "Update X-UI Management Tool",
             "Uninstall X-UI Management Tool",
         ]
-        idx = menu_select(options, "X-UI Management Tool")
+        idx = menu_select(options, "X-UI Management Tool", gap_after=[6])
         if idx == 0:
             print("You can use xuim for run it again.")
             sys.exit(0)
