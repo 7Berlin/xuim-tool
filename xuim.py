@@ -648,7 +648,7 @@ def uninstall_tool():
     try:
         print("🚀 Running uninstall script...")
         exit_code = os.system(
-            "bash <(curl -s https://raw.githubusercontent.com/7berlin/xuim-tool/main/uninstall.sh)"
+            "bash -c 'bash <(curl -s https://raw.githubusercontent.com/7berlin/xuim-tool/main/uninstall.sh)'"
         )
         if exit_code == 0:
             print("✅ Uninstall completed successfully.")
@@ -665,7 +665,7 @@ def update_tool():
     try:
         print("🚀 Running update script...")
         exit_code = os.system(
-            "bash <(curl -s https://raw.githubusercontent.com/7berlin/xuim-tool/main/install.sh)"
+            "bash -c 'bash <(curl -s https://raw.githubusercontent.com/7berlin/xuim-tool/main/install.sh)'"
         )
         if exit_code == 0:
             print("✅ Update completed successfully.")
