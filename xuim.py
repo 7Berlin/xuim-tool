@@ -670,9 +670,6 @@ def uninstall_tool():
 
 
 def update_tool():
-    """
-    Run the install script from GitHub to update the X-UI Management Tool.
-    """
     try:
         print("🚀 Running update script...")
         result = subprocess.run(
