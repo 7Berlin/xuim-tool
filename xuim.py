@@ -6,6 +6,7 @@ import os
 import sys
 from tabulate import tabulate
 
+__version__ = "1.0.0"
 DB_PATH = "/etc/x-ui/x-ui.db"
 now = int(time.time())
 
@@ -44,7 +45,7 @@ def menu_select(options, title="Menu", gap_after=None):
             print()
 
     print(
-        f"\033[1;31m0.\033[0m {'Exit' if title == 'X-UI Management Tool' else 'Back'}"
+        f"\033[1;31m0.\033[0m {'Exit' if title == f'X-UI Management Tool {__version__}' else 'Back'}"
     )
 
     choice = input("\nEnter number: ").strip()
@@ -650,9 +651,6 @@ def inactive_menu():
 
 
 def uninstall_tool():
-    """
-    Run the uninstall script from GitHub to remove the X-UI Management Tool.
-    """
     try:
         print("🚀 Running uninstall script...")
         result = subprocess.run(
@@ -661,8 +659,8 @@ def uninstall_tool():
             executable="/bin/bash",
         )
         if result.returncode == 0:
-            print("✅ Uninstall completed successfully. Exiting program...")
-            sys.exit(0)  # بعد از حذف، برنامه بسته میشه
+            print("✅ Uninstall completed successfully.")
+            sys.exit(0)
         else:
             print(f"❌ Uninstall script failed with exit code {result.returncode}")
     except Exception as e:
@@ -698,7 +696,7 @@ def main_menu():
             "Update X-UI Management Tool",
             "Uninstall X-UI Management Tool",
         ]
-        idx = menu_select(options, "X-UI Management Tool", gap_after=[6])
+        idx = menu_select(options, f"X-UI Management Tool {__version__}", gap_after=[6])
         if idx == 0:
             print("You can use xuim for run it again.")
             sys.exit(0)
