@@ -650,9 +650,9 @@ def uninstall_tool():
         exit_code = os.system(
             "bash -c 'bash <(curl -s https://raw.githubusercontent.com/7berlin/xuim-tool/main/uninstall.sh)'"
         )
-        sys.exit(0)
         if exit_code == 0:
             print("✅ Uninstall completed successfully.")
+            sys.exit(0)
         else:
             print(f"❌ Uninstall script failed with exit code {exit_code}")
     except Exception as e:
