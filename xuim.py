@@ -236,7 +236,7 @@ def get_inactive_users(inbound_id=None):
 def delete_users(users):
     """
     Delete users completely from all inbounds and client_traffics.
-    users: list of dicts with keys 'email' and optionally 'inbound_id'
+    users: list of dicts with keys 'email'
     """
     if not users:
         print("No users to delete.")
@@ -252,6 +252,7 @@ def delete_users(users):
     removed_count = 0
 
     try:
+        # Loop all inbounds
         cursor.execute("SELECT id, settings FROM inbounds")
         rows = cursor.fetchall()
         for inbound_id, settings_json in rows:
@@ -259,12 +260,14 @@ def delete_users(users):
                 settings = json.loads(settings_json)
             except Exception:
                 continue
+
             clients = settings.get("clients") or []
             new_clients = [
                 c
                 for c in clients
                 if (c.get("email") or c.get("id") or "") not in emails_to_remove
             ]
+
             if len(new_clients) < len(clients):
                 settings["clients"] = new_clients
                 cursor.execute(
@@ -273,8 +276,10 @@ def delete_users(users):
                 )
                 removed_count += len(clients) - len(new_clients)
 
+        # Delete traffic records for all emails
         for email in emails_to_remove:
             cursor.execute("DELETE FROM client_traffics WHERE email=?", (email,))
+
         conn.commit()
         print(f"✅ Deleted {removed_count} users and removed their traffic records.")
 
@@ -282,141 +287,6 @@ def delete_users(users):
         print(f"Failed to delete users: {e}")
     finally:
         conn.close()
-    if not users:
-        print("No users to delete.")
-        return
-    conn = connect_db()
-    cursor = conn.cursor()
-    removed = 0
-    for u in users:
-        try:
-            cursor.execute(
-                "SELECT settings FROM inbounds WHERE id=?", (u["inbound_id"],)
-            )
-            row = cursor.fetchone()
-            if row:
-                settings = json.loads(row[0])
-                clients = settings.get("clients") or []
-                new_clients = [
-                    c for c in clients if (c.get("email") or c.get("id")) != u["email"]
-                ]
-                if len(new_clients) < len(clients):
-                    settings["clients"] = new_clients
-                    cursor.execute(
-                        "UPDATE inbounds SET settings=? WHERE id=?",
-                        (json.dumps(settings, ensure_ascii=False), u["inbound_id"]),
-                    )
-                    removed += 1
-                    print(f"Removed {u['email']} from inbounds")
-
-            cursor.execute("DELETE FROM client_traffics WHERE email=?", (u["email"],))
-            conn.commit()
-            print(f"Removed {u['email']} from client_traffics")
-        except Exception as e:
-            print(f"Failed to remove {u.get('email')}: {e}")
-            continue
-
-    conn.close()
-    print(f"Deletion completed. Total removed attempts: {removed}")
-    if not users:
-        print("No users to delete.")
-        return
-    conn = connect_db()
-    cursor = conn.cursor()
-    removed = 0
-    for u in users:
-        try:
-            cursor.execute(
-                "SELECT settings FROM inbounds WHERE id=?", (u["inbound_id"],)
-            )
-            row = cursor.fetchone()
-            if row:
-                settings = json.loads(row[0])
-                clients = settings.get("clients") or []
-                new_clients = [
-                    c for c in clients if (c.get("email") or c.get("id")) != u["email"]
-                ]
-                settings["clients"] = new_clients
-                cursor.execute(
-                    "UPDATE inbounds SET settings=? WHERE id=?",
-                    (json.dumps(settings, ensure_ascii=False), u["inbound_id"]),
-                )
-
-            cursor.execute("DELETE FROM client_traffics WHERE email=?", (u["email"],))
-
-            removed += 1
-            print(f"Removed {u['email']} (from inbounds & client_traffics)")
-        except Exception as e:
-            print(f"Failed to remove {u.get('email')}: {e}")
-            continue
-    conn.commit()
-    conn.close()
-    print(f"Deletion completed. Total removed attempts: {removed}")
-    if not users:
-        print("No users to delete.")
-        return
-    conn = connect_db()
-    cursor = conn.cursor()
-    removed = 0
-    for u in users:
-        try:
-            cursor.execute(
-                "SELECT settings FROM inbounds WHERE id=?", (u["inbound_id"],)
-            )
-            row = cursor.fetchone()
-            if row:
-                settings = json.loads(row[0])
-                clients = settings.get("clients") or []
-                new_clients = [
-                    c for c in clients if (c.get("email") or c.get("id")) != u["email"]
-                ]
-                if len(new_clients) < len(clients):
-                    settings["clients"] = new_clients
-                    cursor.execute(
-                        "UPDATE inbounds SET settings=? WHERE id=?",
-                        (json.dumps(settings, ensure_ascii=False), u["inbound_id"]),
-                    )
-                    removed += 1
-                    print(f"Removed {u['email']} from inbound {u['inbound_id']}")
-
-            cursor.execute("DELETE FROM client_traffics WHERE email=?", (u["email"],))
-            conn.commit()
-        except Exception as e:
-            print(f"Failed to remove {u.get('email')}: {e}")
-            continue
-    conn.close()
-    print(f"Deletion completed. Total removed attempts: {removed}")
-    if not users:
-        print("No users to delete.")
-        return
-    conn = connect_db()
-    cursor = conn.cursor()
-    removed = 0
-    for u in users:
-        try:
-            cursor.execute("SELECT settings FROM inbounds WHERE port=?", (u["port"],))
-            row = cursor.fetchone()
-            if not row:
-                continue
-            settings = json.loads(row[0])
-            clients = settings.get("clients") or []
-            new_clients = [
-                c for c in clients if (c.get("email") or c.get("id")) != u["email"]
-            ]
-            if len(new_clients) == len(clients):
-                continue
-            settings["clients"] = new_clients
-            cursor.execute(
-                "UPDATE inbounds SET settings=? WHERE port=?",
-                (json.dumps(settings, ensure_ascii=False), u["port"]),
-            )
-            removed += 1
-            print(f"Removed {u['email']}")
-        except Exception as e:
-            print(f"Failed to remove {u.get('email')}: {e}")
-    conn.commit()
-    conn.close()
-    print(f"Deletion completed. Total removed attempts: {removed}")
 
 
 # ------------------------- Display Tables ------------------------- #
