@@ -1,5 +1,6 @@
 import sqlite3
 import json
+import subprocess
 import time
 import os
 import sys
@@ -647,14 +648,16 @@ def uninstall_tool():
     """
     try:
         print("🚀 Running uninstall script...")
-        exit_code = os.system(
-            "bash -c 'bash <(curl -s https://raw.githubusercontent.com/7berlin/xuim-tool/main/uninstall.sh)'"
+        result = subprocess.run(
+            "bash <(curl -s https://raw.githubusercontent.com/7berlin/xuim-tool/main/uninstall.sh)",
+            shell=True,
+            executable="/bin/bash",
         )
-        if exit_code == 0:
-            print("✅ Uninstall completed successfully.")
-            sys.exit(0)
+        if result.returncode == 0:
+            print("✅ Uninstall completed successfully. Exiting program...")
+            sys.exit(0)  # بعد از حذف، برنامه بسته میشه
         else:
-            print(f"❌ Uninstall script failed with exit code {exit_code}")
+            print(f"❌ Uninstall script failed with exit code {result.returncode}")
     except Exception as e:
         print(f"⚠️ Error running uninstall script: {e}")
 
@@ -665,13 +668,15 @@ def update_tool():
     """
     try:
         print("🚀 Running update script...")
-        exit_code = os.system(
-            "bash -c 'bash <(curl -s https://raw.githubusercontent.com/7berlin/xuim-tool/main/install.sh)'"
+        result = subprocess.run(
+            "bash <(curl -s https://raw.githubusercontent.com/7berlin/xuim-tool/main/install.sh)",
+            shell=True,
+            executable="/bin/bash",
         )
-        if exit_code == 0:
-            print("✅ Update completed successfully.")
+        if result.returncode == 0:
+            print("✅ Update completed successfully. You can continue using the tool.")
         else:
-            print(f"❌ Update script failed with exit code {exit_code}")
+            print(f"❌ Update script failed with exit code {result.returncode}")
     except Exception as e:
         print(f"⚠️ Error running update script: {e}")
 
