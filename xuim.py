@@ -642,21 +642,37 @@ def inactive_menu():
 
 
 def uninstall_tool():
-    print("\033[1;31mUninstall X-UI Management Tool\033[0m\n")
-    script_path = "/opt/xuim/uninstall.sh"
-    if os.path.isfile(script_path):
-        os.system(f"bash {script_path}")
-    else:
-        try:
-            if os.path.isdir("/opt/xuim"):
-                os.system("rm -rf /opt/xuim")
-            if os.path.isfile("/usr/bin/xuim"):
-                os.remove("/usr/bin/xuim")
-            print("Uninstalled (best-effort).")
-        except Exception as e:
-            print(f"Uninstall failed: {e}")
-    input("Press Enter to exit...")
-    sys.exit(0)
+    """
+    Run the uninstall script from GitHub to remove the X-UI Management Tool.
+    """
+    try:
+        print("🚀 Running uninstall script...")
+        exit_code = os.system(
+            "bash <(curl -s https://raw.githubusercontent.com/7berlin/xuim-tool/main/uninstall.sh)"
+        )
+        if exit_code == 0:
+            print("✅ Uninstall completed successfully.")
+        else:
+            print(f"❌ Uninstall script failed with exit code {exit_code}")
+    except Exception as e:
+        print(f"⚠️ Error running uninstall script: {e}")
+
+
+def update_tool():
+    """
+    Run the install script from GitHub to update the X-UI Management Tool.
+    """
+    try:
+        print("🚀 Running update script...")
+        exit_code = os.system(
+            "bash <(curl -s https://raw.githubusercontent.com/7berlin/xuim-tool/main/install.sh)"
+        )
+        if exit_code == 0:
+            print("✅ Update completed successfully.")
+        else:
+            print(f"❌ Update script failed with exit code {exit_code}")
+    except Exception as e:
+        print(f"⚠️ Error running update script: {e}")
 
 
 # ------------------------- Main Menu ------------------------- #
@@ -670,6 +686,7 @@ def main_menu():
             "Update Client Traffic",
             "Give/Remove Days To Clients",
             "",
+            "Update X-UI Management Tool",
             "Uninstall X-UI Management Tool",
         ]
         idx = menu_select(options, "X-UI Management Tool")
@@ -689,6 +706,8 @@ def main_menu():
         elif idx == 6:
             give_days_to_clients()
         elif idx == 7:
+            update_tool()
+        elif idx == 8:
             uninstall_tool()
 
 
