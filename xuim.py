@@ -6,7 +6,7 @@ import os
 import sys
 from tabulate import tabulate
 
-__version__ = "1.0.0"
+__version__ = "v1.0.0"
 DB_PATH = "/etc/x-ui/x-ui.db"
 now = int(time.time())
 
@@ -651,6 +651,15 @@ def inactive_menu():
 
 
 def uninstall_tool():
+    confirm = (
+        input("⚠️ Are you sure you want to uninstall X-UI Management Tool? (yes/no): ")
+        .strip()
+        .lower()
+    )
+    if confirm != "yes":
+        print("❌ Uninstall cancelled. Returning to main menu...")
+        return
+
     try:
         print("🚀 Running uninstall script...")
         result = subprocess.run(
@@ -659,7 +668,7 @@ def uninstall_tool():
             executable="/bin/bash",
         )
         if result.returncode == 0:
-            print("✅ Uninstall completed successfully.")
+            print("✅ Uninstall completed successfully. Exiting program...")
             sys.exit(0)
         else:
             print(f"❌ Uninstall script failed with exit code {result.returncode}")
